@@ -1,0 +1,1 @@
+mlx-lm>=0.32  # 仅 Apple Silicon，用于基线评测和（可选）LoRA 微调

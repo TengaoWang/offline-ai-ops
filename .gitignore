@@ -10,3 +10,5 @@ kb/index.db
 # 厂商手册有版权限制（不得复制传播），不进 git，放 SSD 或线下传递
 kb/docs/*
 !kb/docs/.gitkeep
+# 测试用 PDF 由 tests/make_fixture.py 生成
+tests/fixtures/

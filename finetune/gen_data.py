@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-# 训练、评测与线上调用必须使用同一份系统提示词，唯一来源是 router/router.py
+# 训练、评测与线上调用必须使用同一份系统提示词，唯一来源是 llm/router.py
 from llm.router import SKILLS, SYSTEM_PROMPT  # noqa: E402
 
 # ---------------------------------------------------------------------------
