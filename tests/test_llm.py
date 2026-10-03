@@ -164,6 +164,7 @@ class MockModeTest(unittest.TestCase):
 
     def test_route_returns_known_skill_or_none(self):
         self.assertEqual(router.route("df -h 看到 /var 满了")["skill"], "disk-full")
+        self.assertEqual(router.route("MES 服务器业务网不通，管理口能 ping 通")["skill"], "net-unreachable")
         self.assertIsNone(router.route("打印机卡纸了")["skill"])
 
     def test_ask_maps_citation_numbers_to_real_sources(self):

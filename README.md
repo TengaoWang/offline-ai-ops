@@ -89,6 +89,16 @@ Windows 上把命令里的 `.venv/bin/python` 换成 `.venv\Scripts\python`。
 没有模型时可以先用 mock 模式开发界面：`LLM_MOCK=1 .venv/bin/python -m llm ask "随便问"`。
 接口的参数、返回格式和配置见 [`llm/README.md`](llm/README.md)。
 
+## 启动前端操作台
+
+前端是本地 Web 操作台，静态资源由 Python 服务托管，不需要 Node、CDN 或外网请求。
+
+```bash
+LLM_MOCK=1 .venv/bin/python -m ui.server
+```
+
+打开 `http://127.0.0.1:8765` 即可使用。已有 Ollama、模型和索引时，可以去掉 `LLM_MOCK=1` 连接真实 `llm` 接口；采集、规则树、报告和存技能在 `engine/` 接入前使用本地演示流。
+
 ## 当前结果
 
 | 项目 | 结果 | 条件 |

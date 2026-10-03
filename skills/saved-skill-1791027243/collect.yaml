@@ -1,0 +1,5 @@
+commands:
+  - "ping 192.168.10.20 -c 2"
+  - "ping 192.168.10.1 -c 2"
+  - "ipconfig | findstr 192.168"
+  - "ping 192.168.10.21 -c 2"

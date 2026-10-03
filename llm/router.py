@@ -35,8 +35,8 @@ OUTPUT_SCHEMA = {
 _MOCK_KEYWORDS = [
     ("disk-full", ["磁盘", "硬盘", "空间", "df", "inode", "disk", "盘满"]),
     ("log-audit", ["日志", "登录", "审计", "login", "audit"]),
-    ("service-down", ["起不来", "服务", "进程", "502", "503", "nginx", "mysql", "failed"]),
     ("net-unreachable", ["ping", "网络", "连不上", "丢包", "网关", "vlan", "网线"]),
+    ("service-down", ["起不来", "服务异常", "服务挂", "进程", "502", "503", "nginx", "mysql", "failed"]),
 ]
 
 
