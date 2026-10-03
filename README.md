@@ -10,7 +10,7 @@ GGboys · HacKU 2026 · Deep Technology Problem Statement 4（The Capability Tha
 | 目录 | 内容 | 状态 |
 |---|---|---|
 | [`llm/`](llm/) | **模型与知识库接口**：`route` / `retrieve` / `ask` / `chat` / `health`，供引擎和界面调用 | 可用 |
-| [`finetune/`](finetune/) | 技能路由的测试数据、评测脚本，以及（暂未启用的）LoRA 微调配置 | 可用 |
+| [`eval/`](eval/) | 技能路由的测试数据与评测脚本 | 可用 |
 | [`tests/`](tests/) | `llm` 接口的单元测试（不需要 Ollama） | 9 项通过 |
 | `kb/docs/` | 厂商手册放这里（不进 git） | — |
 

@@ -1,12 +1,13 @@
-"""生成 T1「技能路由」微调数据：用户对故障的描述 -> 应调用的技能包。
+"""生成「技能路由」评测数据：用户对故障的描述 -> 应调用的技能包。
 
-输出 messages 格式的 jsonl（mlx-lm / LLaMA-Factory 通用）到 finetune/data/：
-  train.jsonl / valid.jsonl / test.jsonl
+输出 messages 格式的 jsonl 到 eval/data/：
+  test.jsonl                评测用（87 条），eval_route.py 读取这一份
+  train.jsonl / valid.jsonl 预留：将来如需微调可直接使用
 
-防止数据泄漏：按「基础说法模板」划分数据集，测试集里的说法在训练集中从未出现过，
-只有这样测出来的准确率才能代表模型对新说法的泛化能力。
+划分按「基础说法模板」进行，测试集里的说法不会出现在 train / valid 中。
+提示词调优时只看 train / valid 的说法，最后再用 test 测，准确率才代表对新说法的泛化能力。
 
-用法：python finetune/gen_data.py [--seed 42]
+用法：python eval/gen_data.py [--seed 42]
 """
 
 import argparse
@@ -16,7 +17,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-# 训练、评测与线上调用必须使用同一份系统提示词，唯一来源是 llm/router.py
+# 评测与线上调用必须使用同一份系统提示词，唯一来源是 llm/router.py
 from llm.router import SKILLS, SYSTEM_PROMPT  # noqa: E402
 
 # ---------------------------------------------------------------------------

@@ -72,4 +72,4 @@ Windows PowerShell：`$env:LLM_MOCK="1"`。
 - `ask` 每次把 5 段（每段至多 600 字）交给模型，较长的回答约 25 秒。
 - `page` 是 PDF 阅读器里的页码（封面为第 1 页），不是手册页脚印的页码。
 - 建索引时会跳过目录页（引导点「......」占比超过 30% 的页）。
-- `route` 用的是基座模型 + 提示词，没有微调；评测结果见 [`finetune/README.md`](../finetune/README.md)。
+- `route` 用的是基座模型 + 提示词，没有微调；评测结果见 [`eval/README.md`](../eval/README.md)。

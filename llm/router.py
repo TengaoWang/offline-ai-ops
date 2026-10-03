@@ -1,7 +1,7 @@
 """技能路由：用户对故障的描述 -> 应执行的技能包 ID。
 
 基座模型 Qwen3-8B（Ollama），不微调，靠系统提示词 + JSON Schema 约束输出。
-在 87 条测试题上的基线准确率见 finetune/results/。
+在 87 条测试题上的准确率见 eval/README.md。
 """
 
 import json
@@ -12,7 +12,7 @@ from .client import chat
 
 SKILLS = ["net-unreachable", "disk-full", "service-down", "log-audit"]
 
-# 唯一的提示词来源：finetune/gen_data.py 生成的数据、评测、线上调用都用这一份
+# 唯一的提示词来源：eval/ 的测试数据、评测和线上调用都用这一份
 SYSTEM_PROMPT = """你是离线机房运维助手的「技能路由」。根据用户对故障或需求的描述，选择一个最合适的技能包。
 只输出一行 JSON：{"skill": "<技能ID>"}；如果都不匹配，输出 {"skill": null}。
 
