@@ -1,0 +1,6 @@
+.venv/
+data/
+adapters/
+results/
+fused/
+*.gguf
