@@ -49,6 +49,16 @@ class RetrieveTest(unittest.TestCase):
     def test_no_match_returns_empty(self):
         self.assertEqual(rag.retrieve("天气预报", k=3, index_path=self.index), [])
 
+    def test_ask_with_no_results_has_full_shape(self):
+        original = rag.retrieve
+        rag.retrieve = lambda q, k=5: []
+        try:
+            result = rag.ask("天气预报")
+        finally:
+            rag.retrieve = original
+        self.assertEqual(set(result), {"answer", "found", "citations", "unsupported_commands", "latency_s"})
+        self.assertFalse(result["found"])
+
     def test_falls_back_to_bm25_without_vectors(self):
         top = rag.retrieve("trunk allow-pass vlan", k=1, index_path=self.index, mode="hybrid")[0]
         self.assertEqual(top["mode"], "bm25")

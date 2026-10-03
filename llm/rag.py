@@ -35,7 +35,7 @@ OVERLAP_CHARS = 100   # 相邻两段的重叠，避免一句话被切断后检�
 MIN_CHUNK_CHARS = 20  # 一节的最后一段太短（如只有标题）就不单独成段
 FOOTER_LINES = 6      # 每页最后几行里找页眉页脚
 TITLE_MATCH_CHARS = 12  # 用标题前多少个字（去掉空白）在正文里定位小节的起始行
-HEADING_WEIGHT = 1.0  # 章节标题命中的权重（相对正文）；在维护宝典上试过 1/2/3，1 整体最好
+HEADING_WEIGHT = 1.0  # 章节标题命中的权重（相对正文）；按页切块时在维护宝典上试过 1/2/3，1 整体最好
 CANDIDATES = 20       # 混合检索时，BM25 和向量各取多少段参与合并
 RRF_K = 60            # RRF 公式 1/(RRF_K + 名次) 里的常数，60 是论文和业界的常用值
 VECTOR_WEIGHT = 2.0   # 合并时向量这一路的权重（BM25 为 1）；测试集上 1.5 到 3 结果相同，取中间值
@@ -204,7 +204,8 @@ def _chunk_lines(lines: list[tuple[int | None, str]]):
 
 
 def ingest(docs_dir: Path | str | None = None, index_path: Path | str | None = None) -> dict:
-    """重建索引，返回 {"files": 文件数, "chunks": 片段数}。手册更新后重新运行即可。"""
+    """重建索引，返回 {"files": 文件数, "chunks": 片段数, "vectors": 向量化结果或失败原因}。
+    手册更新后重新运行即可；向量模型不可用时只建 BM25 索引，检索自动退回 BM25。"""
     docs_dir = Path(docs_dir or config.DOCS_DIR)
     index_path = Path(index_path or config.INDEX_PATH)
     files = sorted(p for p in docs_dir.rglob("*") if p.suffix.lower() in {".pdf", ".md", ".txt"})
@@ -489,7 +490,7 @@ def _unsupported_commands(answer: str, sources: list[str]) -> list[str]:
 
 
 def ask(question: str, k: int = 5, model: str | None = None) -> dict:
-    """根据手册回答问题。
+    """根据手册回答问题。先检索 k 段，补上同一小节的相邻段并合并，最多把 ASK_PASSAGES 段交给模型。
 
     返回 {"answer": 回答, "found": 是否找到依据, "citations": [{"n", "file", "page", "section",
     "label", "text"}], "unsupported_commands": 出处里找不到的命令, "latency_s": 耗时}。
@@ -500,7 +501,8 @@ def ask(question: str, k: int = 5, model: str | None = None) -> dict:
     start = time.perf_counter()
     chunks = retrieve(question, k=k)
     if not chunks:
-        return {"answer": NOT_FOUND, "found": False, "citations": [], "latency_s": 0.0}
+        return {"answer": NOT_FOUND, "found": False, "citations": [], "unsupported_commands": [],
+                "latency_s": round(time.perf_counter() - start, 3)}
     chunks = _with_neighbors(chunks)[:ASK_PASSAGES]
 
     if config.MOCK:
@@ -526,9 +528,10 @@ def ask(question: str, k: int = 5, model: str | None = None) -> dict:
     unsupported = _unsupported_commands(answer, [chunks[n - 1]["text"] for n in numbers]) if found else []
     # 命令在标注的出处里找不到、但在交给模型的其他资料里有：是模型标错了编号，把那一段补进出处
     for n, chunk in enumerate(chunks, 1):
-        if unsupported and n not in numbers and len(_unsupported_commands("\n".join(unsupported), [chunk["text"]])) < len(unsupported):
+        chunk_key = _command_key(chunk["text"])
+        if unsupported and n not in numbers and any(_command_key(c) in chunk_key for c in unsupported):
             numbers.append(n)
-            unsupported = _unsupported_commands(answer, [chunks[m - 1]["text"] for m in numbers])
+            unsupported = [c for c in unsupported if _command_key(c) not in chunk_key]
     if unsupported:
         found = False
     citations = [

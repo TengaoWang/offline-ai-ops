@@ -10,9 +10,11 @@ GGboys · HacKU 2026 · Deep Technology Problem Statement 4（The Capability Tha
 | 目录 | 内容 | 状态 |
 |---|---|---|
 | [`llm/`](llm/) | **模型与知识库接口**：`route` / `retrieve` / `ask` / `chat` / `health`，供引擎和界面调用 | 可用 |
-| [`eval/`](eval/) | 技能路由的测试数据与评测脚本 | 可用 |
-| [`tests/`](tests/) | `llm` 接口的单元测试（不需要 Ollama） | 9 项通过 |
+| [`eval/`](eval/) | 技能路由评测、手册检索评测 | 可用 |
+| [`tests/`](tests/) | `llm` 接口的单元测试（不需要 Ollama） | 22 项通过 |
+| [`docs/`](docs/) | 需求文档、前端方案、RAG 技术路线与交接说明 | — |
 | `kb/docs/` | 厂商手册放这里（不进 git） | — |
+| `kb/index.db` | 手册索引（不进 git，可以直接拷给队友） | — |
 
 ## 安装 Ollama 和下载模型
 
@@ -35,7 +37,8 @@ ollama --version
 ### 2. 下载模型
 
 ```bash
-ollama pull qwen3:8b      # 约 5.2GB，默认使用；建议 16GB 内存或 8GB 显存以上
+ollama pull qwen3:8b      # 约 5.2GB，回答用；建议 16GB 内存或 8GB 显存以上
+ollama pull bge-m3        # 约 1.2GB，手册向量检索用
 ```
 
 电脑配置较低（8GB 内存、没有独显）时，改用 4B 模型，并通过环境变量告诉程序：
@@ -48,7 +51,7 @@ export LLM_MODEL=qwen3:4b # Windows PowerShell：$env:LLM_MODEL="qwen3:4b"
 ### 3. 确认可用
 
 ```bash
-ollama list                       # 列表里应出现 qwen3:8b
+ollama list                       # 列表里应出现 qwen3:8b 和 bge-m3
 ollama run qwen3:8b "你好"         # 能正常回答即可，第一次加载需要十几秒
 ```
 
@@ -70,12 +73,14 @@ ollama run qwen3:8b "你好"         # 能正常回答即可，第一次加载�
 uv venv .venv --python 3.12
 uv pip install --python .venv/bin/python -r requirements.txt
 
-# 2. 手册放进 kb/docs/ 后建索引，再检查是否就绪
+# 2. 索引：向队友要 kb/index.db 放到 kb/ 下（推荐）；
+#    或者把手册放进 kb/docs/ 后自己建（约 20 分钟）
 .venv/bin/python -m llm ingest
-.venv/bin/python -m llm health      # ollama、model、index 都为 true 即可
+.venv/bin/python -m llm health      # ollama、model、embed_model、index 都为 true，vectors 等于 chunks 即可
 
 # 3. 试用
 .venv/bin/python -m llm route "nginx 起不来"
+.venv/bin/python -m llm search "怎么检查光模块是不是坏了"
 .venv/bin/python -m llm ask "交换机 CPU 占用率高怎么处理"
 ```
 
@@ -90,12 +95,17 @@ Windows 上把命令里的 `.venv/bin/python` 换成 `.venv\Scripts\python`。
 |---|---|---|
 | 技能路由准确率 | 97.7%（85/87），JSON 合法率 100% | Qwen3-8B 基座 + 提示词（Ollama），不微调；MacBook Air M4 16GB |
 | 技能路由耗时 | 平均 0.70 秒/条 | 同上 |
-| 手册检索 | 7 个试测问题中 5 个正确章节排第 1；「接口一直是 down」类问题排第 4、第 7 | 《华为 S 系列园区交换机维护宝典》第 25 版，BM25 |
+| 手册检索 | Hit@1 77%，Hit@3 94%（口语题 Hit@3 91%，FR-2 预设题 100%）；只用 BM25 时为 58% / 74%（口语题 45%） | 《华为 S 系列园区交换机维护宝典》第 25 版，BM25 + bge-m3 混合检索，36 题测试集 |
+| 手册检索耗时 | 约 0.05 秒/次 | MacBook Air M4 16GB |
+| 手册问答（`ask`）耗时 | 15 到 50 秒/次，**还没达到每轮 30 秒以内** | 同上，qwen3:8b |
 
-测试集为模板生成的 87 条（测试集中的说法训练与调试时未出现），样本量小，不代表真实场景的普遍准确率。
+技能路由的测试集为模板生成的 87 条（测试集中的说法训练与调试时未出现）。手册检索的测试集是调参用的同一批题，没有独立的留出集。两者样本量都小，不代表真实场景的普遍准确率。
 
 ## 下一步
 
-- 提高「接口 Down / VLAN 不通」类问题的检索准确度：同义词扩展、向量检索（bge-m3）
-- 建立带标准章节的检索测试集，量化每次改动的效果
-- 缩短 `ask` 的耗时（交给模型的片段更短）
+- 手册问答提速（目标每轮 30 秒以内）
+- 检索阶段的拒答：手册里没有的问题直接返回「未找到」，不用等模型
+- 端到端问答评测：检查回答里的命令是否正确、统计误拒率
+- 在 8GB 内存 + qwen3:4b 的配置下测一次
+
+RAG 的现状、已知问题和接手方法见 [`docs/rag-handoff.md`](docs/rag-handoff.md)。
