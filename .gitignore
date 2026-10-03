@@ -7,3 +7,6 @@ models/
 *.gguf
 kb/index.db
 .Rhistory
+# 厂商手册有版权限制（不得复制传播），不进 git，放 SSD 或线下传递
+kb/docs/*
+!kb/docs/.gitkeep

@@ -27,6 +27,7 @@ jieba.setLogLevel(logging.WARNING)
 NOT_FOUND = "手册中未找到依据。"
 CHUNK_CHARS = 600     # 每段最多字符数
 OVERLAP_CHARS = 100   # 相邻两段的重叠，避免一句话被切断后检索不到
+HEADING_WEIGHT = 1.0  # 章节标题命中的权重（相对正文）；在维护宝典上试过 1/2/3，1 整体最好
 
 ANSWER_PROMPT = """你是离线机房运维助手。只能根据下面带编号的手册片段回答用户问题。
 规则：
@@ -91,6 +92,12 @@ def _text_pages(path: Path):
         yield None, section, "\n".join(buffer)
 
 
+def _is_toc(text: str) -> bool:
+    """目录页（大量「标题......页码」的引导点）对回答没有帮助，还会挤占检索结果，跳过。"""
+    stripped = text.replace(" ", "")
+    return len(stripped) > 0 and stripped.count(".") / len(stripped) > 0.3
+
+
 def _split(text: str):
     text = re.sub(r"[ \t]+", " ", text).strip()
     if len(text) <= CHUNK_CHARS:
@@ -115,18 +122,21 @@ def ingest(docs_dir: Path | str | None = None, index_path: Path | str | None = N
     index_path.unlink(missing_ok=True)
     db = sqlite3.connect(index_path)
     db.execute("CREATE TABLE chunks (id INTEGER PRIMARY KEY, file TEXT, page INTEGER, section TEXT, text TEXT)")
-    db.execute("CREATE VIRTUAL TABLE fts USING fts5(tokens)")
+    # 两列：heading = 最深两级章节标题，body = 正文；检索时标题命中的权重更高
+    db.execute("CREATE VIRTUAL TABLE fts USING fts5(heading, body)")
 
     count = 0
     for path in files:
         pages = _pdf_pages(path) if path.suffix.lower() == ".pdf" else _text_pages(path)
         for page, section, text in pages:
+            if _is_toc(text):
+                continue
             for piece in _split(text):
                 cur = db.execute("INSERT INTO chunks (file, page, section, text) VALUES (?, ?, ?, ?)",
                                  (path.name, page, section, piece))
-                # 章节标题一起参与检索
-                db.execute("INSERT INTO fts (rowid, tokens) VALUES (?, ?)",
-                           (cur.lastrowid, _tokenize(f"{section}\n{piece}")))
+                heading = " ".join(section.split(" > ")[-2:])
+                db.execute("INSERT INTO fts (rowid, heading, body) VALUES (?, ?, ?)",
+                           (cur.lastrowid, _tokenize(heading), _tokenize(piece)))
                 count += 1
     db.commit()
     db.close()
@@ -161,7 +171,7 @@ def retrieve(query: str, k: int = 5, index_path: Path | str | None = None) -> li
     match = " OR ".join('"' + t.replace('"', '""') + '"' for t in dict.fromkeys(terms))
     db = sqlite3.connect(index_path)
     rows = db.execute(
-        "SELECT c.id, c.text, c.file, c.page, c.section, -bm25(fts) AS score "
+        f"SELECT c.id, c.text, c.file, c.page, c.section, -bm25(fts, {HEADING_WEIGHT}, 1.0) AS score "
         "FROM fts JOIN chunks c ON c.id = fts.rowid WHERE fts MATCH ? ORDER BY score DESC LIMIT ?",
         (match, k),
     ).fetchall()
