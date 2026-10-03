@@ -4,7 +4,9 @@
   python -m llm embed [向量模型]        给现有索引补算向量（默认 LLM_EMBED_MODEL）
   python -m llm route "nginx 起不来"    选技能包
   python -m llm search "trunk 配置"     只检索，不调用模型
-  python -m llm ask "怎么配置 trunk"    带出处的问答
+  python -m llm ask "怎么配置 trunk"    带出处的问答（只查手册）
+  python -m llm answer "怎么配置 trunk" 完整流程：先判断问题类型，再给原文和整理后的回答
+  python -m llm answer                 连续对话（记得上一轮，可以回答追问），直接回车退出
 
 search / ask 默认输出给人看的格式；加 --json 输出原始数据（和 Python 接口的返回值相同）。
 search 列出结果后，可以输入编号查看那一条的全文（含同一小节的前后段）；加 --full 一次显示全部全文。
@@ -13,7 +15,7 @@ search 列出结果后，可以输入编号查看那一条的全文（含同一�
 import json
 import sys
 
-from . import ask, health, ingest, retrieve, route
+from . import answer_stream, ask, health, ingest, retrieve, route
 from .rag import _tokenize, _with_neighbors, build_vectors
 
 PREVIEW_CHARS = 120  # search 结果每段预览多少字
@@ -84,11 +86,63 @@ def _print_ask(question: str, result: dict):
     print(f"耗时 {result['latency_s']:.1f} 秒")
 
 
+_ANSWER_TITLES = {
+    "generated": "答（已核对出处）：",
+    "extracted": "模型没能给出有依据的回答，以下为手册原文，请自行判断：",
+    "intro": "答：", "out_of_scope": "答：", "clarify": "需要再确认一下：", "not_found": "答：",
+}
+
+
+def _print_answer(question: str, as_json: bool, history: list[dict] | None = None) -> dict:
+    """完整流程：原文先显示（约 1 秒），模型整理的回答随后显示。返回 answer() 的结果，供下一轮作为历史。"""
+    if not as_json:
+        print(f"问：{question}\n")
+    result = {}
+    for event in answer_stream(question, history):
+        if event["event"] == "final":
+            result = {k: v for k, v in event.items() if k != "event"}
+        if event["event"] == "dispatch" and not as_json and event["query"] != question:
+            print(f"（理解为：{event['query']}）\n", flush=True)
+        if as_json:
+            if event["event"] == "final":
+                print(json.dumps({k: v for k, v in event.items() if k != "event"}, ensure_ascii=False, indent=2))
+        elif event["event"] == "extract":
+            excerpt = event["extract"]
+            print(f"【手册原文】{_short_label(excerpt)}\n{excerpt['text']}\n", flush=True)
+            print("模型正在整理回答……\n", flush=True)
+        elif event["event"] == "final":
+            if event["answer_type"] != "extracted":  # 退回原文时，原文上面已经显示过了
+                print(f"{_ANSWER_TITLES[event['answer_type']]}\n{event['answer']}\n")
+                for c in event["citations"]:
+                    print(f"  出处 [{c['n']}] {_short_label(c)}")
+            else:
+                print(_ANSWER_TITLES["extracted"].rstrip("：") + "（见上方【手册原文】）")
+                if event["unsupported_commands"]:
+                    print(f"  原因：回答里的命令在手册中找不到 {event['unsupported_commands']}")
+            print(f"\n耗时 {event['latency_s']:.1f} 秒")
+    return result
+
+
+def _chat_loop():
+    """连续对话：每一轮都带上之前的结果，用户可以直接回答追问。"""
+    history: list[dict] = []
+    print("连续对话模式，直接回车退出。")
+    while True:
+        try:
+            question = input("\n你：").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return
+        if not question:
+            return
+        history.append(_print_answer(question, False, history))
+
+
 def main():
     args = [a for a in sys.argv[1:] if a not in ("--json", "--full")]
     as_json = "--json" in sys.argv[1:]
     full = "--full" in sys.argv[1:]
-    if not args or args[0] not in {"health", "ingest", "embed", "route", "search", "ask"}:
+    if not args or args[0] not in {"health", "ingest", "embed", "route", "search", "ask", "answer"}:
         sys.exit(__doc__)
     command, rest = args[0], " ".join(args[1:])
     if command == "health":
@@ -97,6 +151,8 @@ def main():
         result = ingest(rest or None)
     elif command == "embed":
         result = build_vectors(rest or None)
+    elif command == "answer" and not rest:
+        return _chat_loop()
     elif not rest:
         sys.exit(f'用法：python -m llm {command} "文本"')
     elif command == "route":
@@ -111,6 +167,8 @@ def main():
             elif result and sys.stdin.isatty() and sys.stdout.isatty():
                 _browse(result)
             return
+    elif command == "answer":
+        return _print_answer(rest, as_json)
     else:
         result = ask(rest)
         if not as_json:

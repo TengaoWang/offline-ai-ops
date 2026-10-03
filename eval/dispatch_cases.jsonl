@@ -1,0 +1,51 @@
+{"query": "S5700 上怎么把 GE0/0/1 配成 trunk 口？", "expect": ["answer"], "source": "fr01"}
+{"query": "不同 VLAN 之间互相访问不通怎么办", "expect": ["answer"], "source": "fr02"}
+{"query": "以太网接口物理 DOWN 怎么排查", "expect": ["answer"], "source": "fr03"}
+{"query": "交换机 CPU 占用率高怎么处理", "expect": ["answer"], "source": "fr04"}
+{"query": "Ping 不通怎么定位故障", "expect": ["answer"], "source": "fr05"}
+{"query": "S5700 端口 VLAN 配置 排障", "expect": ["answer"], "source": "ag01"}
+{"query": "display interface brief 接口状态 down", "expect": ["answer"], "source": "ag02"}
+{"query": "LACP 模式 Eth-Trunk 接口不能 UP", "expect": ["answer"], "source": "ag03"}
+{"query": "接口 error-down 状态恢复", "expect": ["answer"], "source": "ag04"}
+{"query": "网络丢包 故障定位", "expect": ["answer"], "source": "ag05"}
+{"query": "接口物理状态 DOWN 的常见原因和处理步骤", "expect": ["answer"], "source": "fm01"}
+{"query": "二层环路故障如何定位", "expect": ["answer"], "source": "fm02"}
+{"query": "用户无法通过 DHCP 获取 IP 地址", "expect": ["answer"], "source": "fm03"}
+{"query": "CPU 占用率高的故障定位方法", "expect": ["answer"], "source": "fm04"}
+{"query": "网络丢包故障排查", "expect": ["answer"], "source": "fm05"}
+{"query": "设备异常重启的故障定位", "expect": ["answer"], "source": "fm06"}
+{"query": "SSH 登录交换机失败的定位方法", "expect": ["answer"], "source": "fm07"}
+{"query": "交换机忘记登录密码如何修改或清除", "expect": ["answer"], "source": "fm08"}
+{"query": "交换机如何恢复出厂配置", "expect": ["answer"], "source": "fm09"}
+{"query": "PoE 设备 PD 供电异常的定位", "expect": ["answer"], "source": "fm10"}
+{"query": "网口灯不亮，网线插上也没反应", "expect": ["answer"], "source": "co01"}
+{"query": "整个网突然特别卡，交换机的灯一直狂闪，是不是有环", "expect": ["answer"], "source": "co02"}
+{"query": "电脑一直拿不到地址，显示 169 开头的 IP", "expect": ["answer"], "source": "co03"}
+{"query": "交换机特别卡，登上去敲命令都很慢", "expect": ["answer"], "source": "co04"}
+{"query": "视频会议老是卡，ping 的时候时不时丢几个包", "expect": ["answer"], "source": "co05"}
+{"query": "交换机隔一会儿就自己重启一次", "expect": ["answer"], "source": "co06"}
+{"query": "用 SSH 连交换机一直连不上", "expect": ["answer"], "source": "co07"}
+{"query": "交换机密码忘了进不去了", "expect": ["answer"], "source": "co08"}
+{"query": "想把交换机清空，变回刚买来的样子", "expect": ["answer"], "source": "co09"}
+{"query": "摄像头和 AP 插到交换机上不通电不亮", "expect": ["answer"], "source": "co10"}
+{"query": "怎么检查光模块是不是坏了？", "expect": ["answer"], "source": "co11"}
+{"query": "S5700 的保修期是多久", "expect": ["reject"], "source": "un01"}
+{"query": "Windows 电脑怎么重装系统", "expect": ["reject"], "source": "un02"}
+{"query": "MySQL 主从复制怎么配置", "expect": ["reject"], "source": "un03"}
+{"query": "Nginx 报 502 怎么排查", "expect": ["reject"], "source": "un04"}
+{"query": "这款交换机多少钱一台", "expect": ["reject"], "source": "un05"}
+{"query": "你是谁", "expect": ["greet"], "source": "dispatch"}
+{"query": "你好", "expect": ["greet"], "source": "dispatch"}
+{"query": "你能做什么", "expect": ["greet"], "source": "dispatch"}
+{"query": "谢谢你", "expect": ["greet"], "source": "dispatch"}
+{"query": "早上好，在吗", "expect": ["greet"], "source": "dispatch"}
+{"query": "你是哪家公司做的", "expect": ["greet"], "source": "dispatch"}
+{"query": "s5700", "expect": ["clarify"], "source": "dispatch"}
+{"query": "交换机", "expect": ["clarify"], "source": "dispatch"}
+{"query": "vlan", "expect": ["clarify"], "source": "dispatch"}
+{"query": "端口", "expect": ["clarify"], "source": "dispatch"}
+{"query": "华为交换机", "expect": ["clarify"], "source": "dispatch"}
+{"query": "帮我看看交换机", "expect": ["clarify"], "source": "dispatch"}
+{"query": "s5700是什么设备，介绍给我", "expect": ["answer", "clarify"], "source": "dispatch"}
+{"query": "Linux 服务器磁盘满了怎么清理", "expect": ["reject"], "source": "dispatch"}
+{"query": "光模块插上了但是端口不亮", "expect": ["answer"], "source": "dispatch"}

@@ -4,6 +4,7 @@
 
 - [技能路由评测](#技能路由评测)：`llm.route()` 能否根据故障描述选对技能包
 - [手册检索评测](#手册检索评测)：`llm.retrieve()` 能否把正确的章节排在前面
+- [调度器评测](#调度器评测)：`llm.answer()` 的第一步能否分清打招呼、超出范围、太笼统和手册问题
 
 ## 技能路由评测
 
@@ -86,3 +87,23 @@
 终端会列出每道题排第几（「未中」表示前 10 名都没有），最后是汇总；完整结果（每道题的前 3 名）写入 `eval/results/retrieval-<tag>.json`（不进 git）。
 
 加题：在 `retrieval_cases.jsonl` 里加一行，`gold` 写手册章节号。真实用户问过、答错的问题最值得加。
+
+## 调度器评测
+
+`llm.qa.dispatch()` 把问句分成四类：`greet`（打招呼）、`reject`（和交换机无关）、`clarify`（太笼统，要追问）、`answer`（去手册里查）。
+
+测试集 `dispatch_cases.jsonl` 共 51 道：检索测试集里的 36 道（能回答的应判为 `answer`，手册里没有的应判为 `reject`），加上打招呼 6 道、太笼统 6 道、实际测试中遇到的 3 道。
+
+| 类别 | 正确 |
+|---|---|
+| 手册问题 → `answer` | 33/33（**没有手册问题被误拦**） |
+| 超出范围 → `reject` | 6/6 |
+| 打招呼 → `greet` | 5/6（「你是哪家公司做的」判成了 `reject`） |
+| 太笼统 → `clarify` | 6/6 |
+| 总计 | 50/51（98%），平均 2.2 秒/条（Qwen3-8B，MacBook Air M4） |
+
+最要紧的是「手册问题被误拦」（判成 `reject` / `clarify` / `greet`），脚本单独统计为 `answer_blocked`。题量小，打招呼和太笼统的题是自己写的，没有留出集。
+
+```bash
+.venv/bin/python eval/eval_dispatch.py      # 需要 Ollama 和 qwen3:8b，约 2 分钟
+```

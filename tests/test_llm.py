@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from llm import config, rag, router  # noqa: E402
+from llm import config, qa, rag, router  # noqa: E402
 from tests.make_fixture import build  # noqa: E402
 
 
@@ -231,6 +231,120 @@ class CitationGuardTest(unittest.TestCase):
         result = self._ask_with_reply('{"found": true, "answer": "见 [1]", "citations": [1]}')
         self.assertTrue(result["found"])
         self.assertEqual(result["citations"][0]["label"], "《a》 s P1")
+
+
+class AnswerFlowTest(unittest.TestCase):
+    """answer() 完整流程：调度器分流；模型回答通过核对就用它，没通过就退回手册原文。不需要 Ollama。"""
+
+    PASSAGE = {"id": 1, "file": "a.pdf", "page": 7, "section": "配置 > trunk",
+               "text": "步骤1 进入接口视图\ninterface GigabitEthernet 0/0/1\nport link-type trunk"}
+
+    def setUp(self):
+        self._saved = (qa.chat, qa.embed, rag.retrieve, rag.ask, rag._with_neighbors)
+        rag.retrieve = lambda q, k=5: [self.PASSAGE]
+        rag._with_neighbors = lambda chunks, index_path=None: [c | {"ids": [c["id"]]} for c in chunks]
+
+    def tearDown(self):
+        qa.chat, qa.embed, rag.retrieve, rag.ask, rag._with_neighbors = self._saved
+
+    def _dispatch_to(self, action, clarify=""):
+        qa.chat = lambda *a, **kw: f'{{"action": "{action}", "clarify_question": "{clarify}"}}'
+
+    def test_greet_returns_intro_without_retrieval(self):
+        self._dispatch_to("greet")
+        rag.retrieve = lambda q, k=5: self.fail("打招呼不应该去检索")
+        result = qa.answer("你是谁")
+        self.assertEqual((result["action"], result["answer"]), ("greet", qa.INTRO))
+
+    def test_reject_out_of_scope(self):
+        self._dispatch_to("reject")
+        self.assertEqual(qa.answer("Windows 怎么重装")["answer_type"], "out_of_scope")
+
+    def test_clarify_returns_question(self):
+        self._dispatch_to("clarify", "你想了解 S5700 的配置还是排障？")
+        result = qa.answer("s5700")
+        self.assertEqual((result["action"], result["answer"]), ("clarify", "你想了解 S5700 的配置还是排障？"))
+
+    def test_clarify_without_question_falls_back_to_answer(self):
+        self._dispatch_to("clarify", "")
+        self.assertEqual(qa.dispatch("s5700")["action"], "answer")
+
+    def test_bad_dispatch_output_falls_back_to_answer(self):
+        qa.chat = lambda *a, **kw: "不是 JSON"
+        self.assertEqual(qa.dispatch("怎么配置 trunk")["action"], "answer")
+
+    def test_generated_answer_used_when_verified(self):
+        self._dispatch_to("answer")
+        rag.ask = lambda q, prompt=None: {"found": True, "answer": "port link-type trunk", "citations": [{"n": 1}],
+                             "unsupported_commands": []}
+        result = qa.answer("怎么配置 trunk")
+        self.assertEqual(result["answer_type"], "generated")
+        self.assertIn("port link-type trunk", result["extract"]["text"])
+
+    def test_falls_back_to_source_text_when_not_verified(self):
+        self._dispatch_to("answer")
+        rag.ask = lambda q, prompt=None: {"found": False, "answer": rag.NOT_FOUND, "citations": [],
+                             "unsupported_commands": ["interface eth-trunk 1"]}
+        result = qa.answer("怎么配置 trunk")
+        self.assertEqual(result["answer_type"], "extracted")
+        self.assertEqual(result["answer"], self.PASSAGE["text"])
+        self.assertEqual(result["citations"][0]["page"], 7)
+        self.assertEqual(result["unsupported_commands"], ["interface eth-trunk 1"])
+
+    def test_model_error_after_extract_falls_back_to_source_text(self):
+        self._dispatch_to("answer")
+
+        def broken_ask(q, prompt=None):
+            raise qa.LLMError("连不上 Ollama")
+        rag.ask = broken_ask
+        result = qa.answer("怎么配置 trunk")
+        self.assertEqual(result["answer_type"], "extracted")
+        self.assertEqual(result["answer"], self.PASSAGE["text"])
+
+    def test_stream_gives_source_text_before_final(self):
+        self._dispatch_to("answer")
+        rag.ask = lambda q, prompt=None: {"found": False, "answer": rag.NOT_FOUND, "citations": [], "unsupported_commands": []}
+        events = [e["event"] for e in qa.answer_stream("怎么配置 trunk")]
+        self.assertEqual(events, ["dispatch", "extract", "final"])
+
+    def test_follow_up_uses_rewritten_query_and_never_clarifies_twice(self):
+        qa.chat = lambda *a, **kw: '{"action": "clarify", "clarify_question": "哪方面？", "query": "S5700 的型号规格"}'
+        searched = []
+        rag.retrieve = lambda q, k=5: searched.append(q) or [self.PASSAGE]
+        rag.ask = lambda q, prompt=None: {"found": False, "answer": rag.NOT_FOUND, "citations": [], "unsupported_commands": []}
+        history = [{"question": "s5700", "action": "clarify", "answer": "你想了解哪方面？"}]
+        result = qa.answer("型号规格", history)
+        self.assertEqual(result["action"], "answer")  # 上一轮已经追问过，不再追问
+        self.assertEqual(result["query"], "S5700 的型号规格")
+        self.assertEqual(searched, ["S5700 的型号规格"])
+
+    def test_citations_renumbered_in_order_of_appearance(self):
+        citations = [{"n": 1, "label": "a"}, {"n": 3, "label": "c"}, {"n": 2, "label": "b"}]
+        text, ordered = qa._renumber("第一点 [1]\n第二点 [3]\n第三点 [2]\n多余 [9]", citations)
+        self.assertEqual(text, "第一点 [1]\n第二点 [2]\n第三点 [3]\n多余 ")
+        self.assertEqual([(c["n"], c["label"]) for c in ordered], [(1, "a"), (2, "c"), (3, "b")])
+
+    def test_new_flow_uses_its_own_prompt_and_ask_default_unchanged(self):
+        self._dispatch_to("answer")
+        prompts = []
+        rag.ask = lambda q, prompt=None: prompts.append(prompt) or {
+            "found": False, "answer": rag.NOT_FOUND, "citations": [], "unsupported_commands": []}
+        qa.answer("怎么配置 trunk")
+        self.assertEqual(prompts, [qa.QA_ANSWER_PROMPT])
+        self.assertNotEqual(qa.QA_ANSWER_PROMPT, rag.ANSWER_PROMPT)
+
+    def test_history_is_optional(self):
+        self._dispatch_to("greet")
+        self.assertEqual(qa.answer("你好")["query"], "你好")
+
+    def test_extract_keeps_lines_verbatim_around_best_line(self):
+        qa.embed = lambda texts, model: [[1.0, 0.0]] + [[1.0, 0.0] if "trunk" in t else [0.0, 1.0] for t in texts[1:]]
+        lines = [f"无关内容第{i}行" + "。" * 40 for i in range(20)]
+        lines[12] = "port link-type trunk"
+        passage = dict(self.PASSAGE, text="\n".join(lines))
+        excerpt = qa.extract("trunk", passage)["text"].split("\n")
+        self.assertEqual(excerpt[:2], [lines[11], lines[12]])  # 最相关的一行，往前带 1 行
+        self.assertLessEqual(len("".join(excerpt)), qa.EXTRACT_CHARS)
 
 
 if __name__ == "__main__":

@@ -51,6 +51,20 @@ except LLMError as e:
     ...  # Ollama 没启动或模型没下载，提示用户
 ```
 
+**可选：完整问答流程 `answer()`**（新增，`ask()` 不变）。先判断问题类型：打招呼就自我介绍、和交换机无关就说明范围、太笼统就追问（约 1 到 4 秒）；手册问题先截取原文（约 1 秒），再给模型整理的回答，没通过核对就退回原文。支持多轮对话。
+
+```python
+from llm import answer
+
+history = []
+for q in ["s5700", "型号规格"]:      # 第二句会被理解为「S5700 的型号规格」
+    r = answer(q, history)
+    history.append(r)
+    # r["answer_type"]：intro / out_of_scope / clarify / generated / extracted / not_found
+```
+
+界面要不要从 `ask()` 换成 `answer()`，由界面负责人决定；不换不影响现有功能。
+
 完整的参数和返回字段见 [`llm/README.md`](../llm/README.md)。
 
 ## 4. 上手清单
@@ -69,12 +83,14 @@ except LLMError as e:
 | 文件 | 内容 | 要改什么时看这里 |
 |---|---|---|
 | `llm/rag.py` | 解析、切块、建索引、检索、问答、出处核对，全部在这里 | 几乎所有 RAG 改动 |
-| `llm/__main__.py` | 命令行（`search` / `ask` 的显示格式、看全文） | 只影响命令行显示 |
+| `llm/qa.py` | 完整问答流程 `answer()`：调度器、原文截取、审核、多轮对话 | 改问题分类、追问、截取规则 |
+| `llm/__main__.py` | 命令行（`search` / `ask` / `answer` 的显示格式、看全文、连续对话） | 只影响命令行显示 |
 | `llm/config.py` | 环境变量配置 | 换模型、换索引路径 |
 | `llm/client.py` | 调用 Ollama（`chat`、`embed`），只用标准库 | 一般不用动 |
 | `llm/__init__.py` | 对外接口、`health()` | 加新接口 |
-| `tests/test_llm.py` | 22 项单元测试，不需要 Ollama | 每次改完都跑 |
+| `tests/test_llm.py` | 36 项单元测试，不需要 Ollama | 每次改完都跑 |
 | `eval/eval_retrieval.py`、`eval/retrieval_cases.jsonl` | 检索评测和测试集 | 改检索后跑，加新题 |
+| `eval/eval_dispatch.py`、`eval/dispatch_cases.jsonl` | 调度器评测（51 题，98%） | 改调度器提示词后跑 |
 
 `llm/rag.py` 按流程从上到下排列：
 
