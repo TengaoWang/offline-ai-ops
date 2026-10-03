@@ -291,6 +291,16 @@ class AnswerFlowTest(unittest.TestCase):
         self.assertEqual(result["citations"][0]["page"], 7)
         self.assertEqual(result["unsupported_commands"], ["interface eth-trunk 1"])
 
+    def test_model_error_after_extract_falls_back_to_source_text(self):
+        self._dispatch_to("answer")
+
+        def broken_ask(q, prompt=None):
+            raise qa.LLMError("连不上 Ollama")
+        rag.ask = broken_ask
+        result = qa.answer("怎么配置 trunk")
+        self.assertEqual(result["answer_type"], "extracted")
+        self.assertEqual(result["answer"], self.PASSAGE["text"])
+
     def test_stream_gives_source_text_before_final(self):
         self._dispatch_to("answer")
         rag.ask = lambda q, prompt=None: {"found": False, "answer": rag.NOT_FOUND, "citations": [], "unsupported_commands": []}

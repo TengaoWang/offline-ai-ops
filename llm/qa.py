@@ -193,7 +193,11 @@ def answer_stream(question: str, history: list[dict] | None = None):
     excerpt = extract(query, rag._with_neighbors(hits)[0])
     yield {"event": "extract", "extract": excerpt}
 
-    generated = rag.ask(query, prompt=QA_ANSWER_PROMPT)  # 模型整理回答，并做出处和命令核对
+    try:
+        generated = rag.ask(query, prompt=QA_ANSWER_PROMPT)  # 模型整理回答，并做出处和命令核对
+    except LLMError:
+        # 原文已经截取到了，模型这一步出错（如 Ollama 中途停了）时不丢掉原文，按「没通过核对」退回原文
+        generated = {"found": False, "answer": rag.NOT_FOUND, "citations": [], "unsupported_commands": []}
     if generated["found"]:
         text, citations = _renumber(generated["answer"], generated["citations"])
         yield final(answer_type="generated", answer=text, citations=citations, extract=excerpt)
