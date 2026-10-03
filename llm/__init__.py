@@ -1,6 +1,8 @@
 """离线运维助手的模型与知识库接口。队友只需要：
 
-    from llm import route, retrieve, ask, chat, health
+    from llm import route, retrieve, ask, answer, chat, health
+
+ask() 是只查手册的问答；answer() 是完整流程（调度器 → 原文截取 + 模型生成 → 审核），见 llm/qa.py。
 
 详细说明见 llm/README.md。
 """
@@ -9,10 +11,12 @@ from . import config
 from .client import LLMError
 from .client import chat as _chat
 from .client import list_models
+from .qa import answer, answer_stream
 from .rag import NOT_FOUND, ask, ingest, retrieve
 from .router import SKILLS, route
 
-__all__ = ["route", "retrieve", "ask", "chat", "ingest", "health", "SKILLS", "NOT_FOUND", "LLMError"]
+__all__ = ["route", "retrieve", "ask", "answer", "answer_stream", "chat", "ingest", "health", "SKILLS",
+           "NOT_FOUND", "LLMError"]
 
 
 def chat(messages: list[dict], schema: dict | None = None, think: bool = False) -> str:

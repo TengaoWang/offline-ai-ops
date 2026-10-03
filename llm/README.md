@@ -3,7 +3,7 @@
 给引擎（Agent）、界面等模块调用的统一入口。全部在本机运行（Ollama + SQLite），准备完成后不需要联网。
 
 ```python
-from llm import route, retrieve, ask, chat, health
+from llm import route, retrieve, ask, answer, chat, health
 ```
 
 | 函数 | 作用 | 返回 |
@@ -11,6 +11,7 @@ from llm import route, retrieve, ask, chat, health
 | `route(描述)` | 根据故障描述选技能包 | `{"skill": "disk-full" 或 None, "latency_s", "raw"}` |
 | `retrieve(问题, k=5)` | 在手册里检索最相关的 k 段（不调用大模型，约 0.06 秒） | `[{"id", "text", "file", "page", "section", "label", "score", "vec_score", "bm25_rank", "vec_rank", "mode"}]` |
 | `ask(问题, k=5)` | 根据手册回答并附出处；找不到依据就明确说没找到（15 到 50 秒） | `{"answer", "found", "citations": [{"n", "file", "page", "section", "label", "text"}], "unsupported_commands", "latency_s"}` |
+| `answer(问题, history=None)` | **完整流程（新增，可选）**：先判断问题类型（打招呼 / 超出范围 / 太笼统 / 手册问题），手册问题先截取原文、再让模型整理回答；回答没通过核对就退回原文 | `{"question", "query", "action", "answer_type", "answer", "citations", "extract", "unsupported_commands", "latency_s"}` |
 | `chat(messages, schema=None, think=False)` | 通用模型调用，例如规则树未覆盖时的「AI 补充推理」 | 回复文本（传 `schema` 时为 JSON 字符串） |
 | `health()` | 检查 Ollama、模型、向量模型、索引是否就绪 | `{"mock", "ollama", "model", "embed_model", "index", "chunks", "vectors"}` |
 
@@ -18,6 +19,26 @@ from llm import route, retrieve, ask, chat, health
 
 - **Agent 排障循环里查手册：用 `retrieve()`**。快（约 0.06 秒），返回的 `label` 可以直接作为 `rag_hit` 的出处。不要在循环里用 `ask()`，它每次要 15 到 50 秒，超过「每轮不超过 30 秒」的要求。
 - **界面上的手册问答（场景 C）：用 `ask()`**。它会自己检索、让模型回答，并核对出处。
+- **想要更友好的问答：可以换成 `answer()`**（新增，不影响 `ask()`）。打招呼、超出范围的问题约 1 秒返回，太笼统的问题会追问；`answer_stream()` 按步骤产出结果，可以先显示手册原文（约 1 秒），模型整理的回答随后再显示。
+- **多轮对话**：`answer(问题, history)` 的 `history` 传之前几轮 `answer()` 的返回值（可以不传）。用户回答追问时（例如先问「s5700」，被追问后说「型号规格」），会合成完整的问题（返回值里的 `query`，如「S5700 的型号规格」）再去查。最多追问一次。
+
+```python
+history = []
+for question in ["s5700", "型号规格"]:
+    result = answer(question, history)
+    history.append(result)
+```
+
+`answer()` 的 `answer_type`：
+
+| 值 | 含义 | 界面建议 |
+|---|---|---|
+| `intro` | 打招呼，返回自我介绍 | 直接显示 |
+| `out_of_scope` | 和交换机无关 | 直接显示 |
+| `clarify` | 问题太笼统，`answer` 是追问 | 显示追问，等用户补充 |
+| `generated` | 模型整理的回答，已通过出处和命令核对 | 显示回答和出处 |
+| `extracted` | 模型的回答没通过核对，`answer` 是手册原文 | 标明「以下为手册原文」，并显示出处 |
+| `not_found` | 手册里没找到相关内容 | 直接显示 |
 
 ## 返回值说明
 
@@ -60,6 +81,8 @@ uv pip install --python .venv/bin/python -r requirements.txt
 .venv/bin/python -m llm route "nginx 起不来"
 .venv/bin/python -m llm search "怎么检查光模块是不是坏了"   # 只检索；列出后输入编号可看全文
 .venv/bin/python -m llm ask "S5700 上怎么把 GE0/0/1 配成 trunk 口"
+.venv/bin/python -m llm answer "你是谁"                    # 完整流程：先显示原文，再显示整理后的回答
+.venv/bin/python -m llm answer                             # 连续对话：记得上一轮，可以回答追问
 ```
 
 - `search` 列出结果后，输入编号可以查看那一条的全文（含同一小节的前后段，和 `ask` 交给模型的资料一样），直接回车退出；加 `--full` 一次显示全部全文。

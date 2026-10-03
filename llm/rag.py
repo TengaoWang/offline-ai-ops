@@ -489,7 +489,7 @@ def _unsupported_commands(answer: str, sources: list[str]) -> list[str]:
     return [c for c in _commands(answer) if _command_key(c) not in source_key]
 
 
-def ask(question: str, k: int = 5, model: str | None = None) -> dict:
+def ask(question: str, k: int = 5, model: str | None = None, prompt: str | None = None) -> dict:
     """根据手册回答问题。先检索 k 段，补上同一小节的相邻段并合并，最多把 ASK_PASSAGES 段交给模型。
 
     返回 {"answer": 回答, "found": 是否找到依据, "citations": [{"n", "file", "page", "section",
@@ -497,6 +497,8 @@ def ask(question: str, k: int = 5, model: str | None = None) -> dict:
     found 为 False 时 answer 固定为「手册中未找到依据。」。回答里的命令要能在出处原文中找到：
     标注的出处里没有、交给模型的其他资料里有，就把那一段补进出处；都找不到则判定为没有依据，
     那些命令放在 unsupported_commands 里，方便排查。
+
+    prompt：换一份回答提示词（不传时用 ANSWER_PROMPT）。llm.qa 的新流程用自己的提示词，不影响这里的默认行为。
     """
     start = time.perf_counter()
     chunks = retrieve(question, k=k)
@@ -510,7 +512,7 @@ def ask(question: str, k: int = 5, model: str | None = None) -> dict:
     else:
         context = "\n\n".join(f"[{i}] （{_cite_label(c)}）\n{c['text']}" for i, c in enumerate(chunks, 1))
         raw = chat(
-            [{"role": "system", "content": ANSWER_PROMPT},
+            [{"role": "system", "content": prompt or ANSWER_PROMPT},
              {"role": "user", "content": f"手册片段：\n{context}\n\n问题：{question}"}],
             schema=ANSWER_SCHEMA,
             model=model,
