@@ -18,3 +18,9 @@ MOCK = os.environ.get("LLM_MOCK", "0") == "1"
 
 # 单次请求超时（秒）
 TIMEOUT = float(os.environ.get("LLM_TIMEOUT", "120"))
+
+# 向量模型（通过 Ollama 调用）；设为空字符串则关闭向量检索，只用 BM25
+EMBED_MODEL = os.environ.get("LLM_EMBED_MODEL", "bge-m3")
+
+# 检索方式：hybrid（BM25 + 向量，默认）/ vector / bm25；向量不可用时自动退回 bm25
+RETRIEVE_MODE = os.environ.get("LLM_RETRIEVE_MODE", "hybrid")

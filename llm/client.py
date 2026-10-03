@@ -53,3 +53,8 @@ def list_models() -> list[str]:
     request = urllib.request.Request(f"{config.OLLAMA_HOST}/api/tags")
     with _OPENER.open(request, timeout=5) as response:
         return [m["name"] for m in json.loads(response.read())["models"]]
+
+
+def embed(texts: list[str], model: str) -> list[list[float]]:
+    """调用向量模型，把每段文本变成一个向量。"""
+    return _post("/api/embed", {"model": model, "input": texts})["embeddings"]
