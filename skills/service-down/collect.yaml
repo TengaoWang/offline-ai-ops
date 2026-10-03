@@ -1,0 +1,26 @@
+version: 1
+commands:
+  - id: process-list
+    argv: [ps, -axo, "pid,comm"]
+    timeout_s: 5
+    required: true
+    parser: line_count
+    simulation: {status: success, returncode: 0, duration_s: 0.03, output: "PID COMMAND\n1 init\n22 nginx"}
+  - id: network-sockets
+    argv: [netstat, -an]
+    timeout_s: 5
+    required: false
+    parser: line_count
+    simulation: {status: success, returncode: 0, duration_s: 0.03, output: "Active Internet connections\ntcp 0 0 0.0.0.0:80 LISTEN"}
+  - id: system-load
+    argv: [uptime]
+    timeout_s: 3
+    required: false
+    parser: generic
+    simulation: {status: success, returncode: 0, duration_s: 0.01, output: "up 10 days, load average: 0.10, 0.12, 0.09"}
+  - id: nginx-status
+    argv: [systemctl, status, nginx]
+    timeout_s: 5
+    required: false
+    parser: generic
+    simulation: {status: failed, returncode: 3, duration_s: 0.02, output: "nginx.service: failed"}

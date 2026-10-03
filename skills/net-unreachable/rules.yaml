@@ -1,0 +1,47 @@
+version: 1
+rules:
+  - id: target-unreachable
+    label: 目标地址 100% 丢包
+    when: {fact: commands.target-ping.parsed.loss_pct, op: gte, value: 100}
+    on_match:
+      branch: target-unreachable
+      finding:
+        severity: critical
+        title: 目标地址不可达
+        symptom: "预置测试目标丢包率为 ${commands.target-ping.parsed.loss_pct}%"
+        root_cause: 网络路径或目标端状态仍需结合设备侧接口信息定位
+        fix_commands: [检查链路两端线缆和接口状态, 将线缆接入其他空闲接口进行对比验证]
+        ref_ids: [physical-down]
+  - id: local-stack-ok
+    label: 本机回环可达
+    when: {fact: commands.loopback-ping.parsed.reachable, op: eq, value: true}
+    on_match:
+      branch: local-stack-ok
+      finding:
+        severity: ok
+        title: 本机基础网络栈响应正常
+        symptom: 回环地址连通检查成功
+        root_cause: 当前未发现本机回环通信异常
+        fix_commands: [继续检查物理链路和交换机接口状态]
+        ref_ids: [connectivity-check]
+  - id: route-readable
+    label: 路由表可读取
+    when: {fact: commands.route-table.status, op: eq, value: success}
+    on_match:
+      branch: route-collected
+      finding:
+        severity: ok
+        title: 已采集本机路由信息
+        symptom: 路由表只读采集成功
+        root_cause: 路由信息可用于后续人工核对，当前不据此单独判定根因
+        fix_commands: [核对默认网关和目标网段路由]
+        ref_ids: [connectivity-check]
+  - id: device-output-present
+    label: 已取得交换机接口实时输出
+    when: {fact: commands.switch-interface.status, op: exists, value: true}
+    on_miss:
+      branch: ai-evidence-required
+ai:
+  enabled: true
+  trigger: on_unmatched
+  query: "S系列交换机接口物理DOWN故障排除"

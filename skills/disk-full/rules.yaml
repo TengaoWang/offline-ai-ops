@@ -1,0 +1,47 @@
+version: 1
+rules:
+  - id: capacity-threshold
+    label: 文件系统最高使用率达到 90%
+    when: {fact: commands.disk-usage.parsed.max_usage_pct, op: gte, value: 90}
+    on_match:
+      branch: capacity-warning
+      finding:
+        severity: warning
+        title: 文件系统容量达到告警阈值
+        symptom: "${commands.disk-usage.parsed.fullest_mount} 使用率为 ${commands.disk-usage.parsed.max_usage_pct}%"
+        root_cause: 当前只确认容量告警，具体占用来源仍需人工核对
+        fix_commands: [由现场人员确认可清理文件或扩容方案, 清理前备份并核对业务影响]
+        ref_ids: [disk-capacity]
+    on_miss:
+      branch: capacity-ok
+      finding:
+        severity: ok
+        title: 文件系统容量未达到告警阈值
+        symptom: "最高使用率为 ${commands.disk-usage.parsed.max_usage_pct}%"
+        root_cause: 当前未发现达到 90% 的文件系统
+        fix_commands: [无需自动清理，继续监控容量变化]
+        ref_ids: [disk-capacity]
+  - id: temp-collected
+    label: 临时目录占用已采集
+    when: {fact: commands.temp-size.status, op: eq, value: success}
+    on_match:
+      branch: temp-collected
+      finding:
+        severity: ok
+        title: 已读取临时目录占用
+        symptom: /tmp 目录大小采集成功
+        root_cause: 该结果仅作为容量定位上下文
+        fix_commands: [核对临时文件归属后再决定是否处理]
+        ref_ids: [temp-capacity]
+  - id: host-context
+    label: 主机信息已采集
+    when: {fact: commands.host-info.status, op: eq, value: success}
+    on_match:
+      branch: context-collected
+      finding:
+        severity: ok
+        title: 已记录诊断主机上下文
+        symptom: 主机系统信息采集成功
+        root_cause: 用于标识本次容量检查环境，不单独构成故障根因
+        fix_commands: [将主机信息与容量记录一并交接]
+        ref_ids: [disk-capacity]

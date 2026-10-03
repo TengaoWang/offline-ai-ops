@@ -1,0 +1,38 @@
+version: 1
+rules:
+  - id: recent-logins-readable
+    label: 最近登录记录可读取
+    when: {fact: commands.recent-logins.status, op: eq, value: success}
+    on_match:
+      branch: login-context
+      finding:
+        severity: ok
+        title: 已采集最近登录记录
+        symptom: "读取到 ${commands.recent-logins.parsed.session_count} 条非空记录"
+        root_cause: 当前仅提供审计上下文，不据此认定存在或不存在安全事件
+        fix_commands: [由现场人员核对账号、时间和来源是否符合预期]
+        ref_ids: [login-read]
+  - id: current-sessions-readable
+    label: 当前登录会话可读取
+    when: {fact: commands.current-sessions.status, op: eq, value: success}
+    on_match:
+      branch: session-context
+      finding:
+        severity: ok
+        title: 已采集当前登录会话
+        symptom: "读取到 ${commands.current-sessions.parsed.session_count} 个当前会话"
+        root_cause: 会话记录需要结合现场账号清单人工复核
+        fix_commands: [核对当前会话是否属于授权人员]
+        ref_ids: [login-read]
+  - id: audit-context
+    label: 系统上下文可读取
+    when: {fact: commands.system-load.status, op: eq, value: success}
+    on_match:
+      branch: audit-context
+      finding:
+        severity: ok
+        title: 已记录日志审计环境上下文
+        symptom: 系统运行摘要采集成功
+        root_cause: 该信息只用于审计交接，不单独构成异常结论
+        fix_commands: [将运行摘要和登录记录一并保存到现场报告]
+        ref_ids: [load-read]

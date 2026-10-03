@@ -1,0 +1,8 @@
+version: 1
+refs:
+  - id: physical-down
+    resolver: rag
+    query: "接口物理DOWN故障的原因以及故障恢复方法"
+  - id: connectivity-check
+    resolver: rag
+    query: "检查接口物理状态是否为Down 线缆 空闲接口"

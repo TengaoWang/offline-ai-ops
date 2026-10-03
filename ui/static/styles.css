@@ -349,6 +349,8 @@ h1, h2, h3, p { margin-top: 0; }
 .answer-box { border-left: 3px solid #5d84c3; }
 .answer-box strong, .sample-item strong, .empty-card strong { color: #455361; font-size: 11px; }
 .answer-box p, .sample-item p, .empty-card p { margin: 7px 0 0; color: #707c87; font-size: 11px; line-height: 1.7; }
+.manual-answer-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.answer-meta { margin-top: 8px; color: #98a2ad; font-size: 9px; }
 .answer-box.no-source { border-left-color: #d1a04c; }
 .empty-card { box-shadow: var(--shadow); }
 
@@ -544,4 +546,12 @@ h1, h2, h3, p { margin-top: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+}
+.mode-select {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 7px 9px;
+  font: inherit;
 }

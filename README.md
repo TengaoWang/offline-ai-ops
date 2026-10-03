@@ -9,10 +9,14 @@ GGboys · HacKU 2026 · Deep Technology Problem Statement 4（The Capability Tha
 
 | 目录 | 内容 | 状态 |
 |---|---|---|
-| [`llm/`](llm/) | **模型与知识库接口**：`route` / `retrieve` / `ask` / `chat` / `health`，供引擎和界面调用 | 可用 |
-| [`eval/`](eval/) | 技能路由评测、手册检索评测 | 可用 |
-| [`tests/`](tests/) | `llm` 接口的单元测试（不需要 Ollama） | 22 项通过 |
+| [`engine/`](engine/) | 白名单只读执行、技能加载、规则树、AI 补充与带出处报告 | 可用 |
+| [`llm/`](llm/) | 模型、问答、混合检索、不可变知识库快照和 Ollama/llama.cpp 适配 | 可用 |
+| [`ui/`](ui/) | 本地 Web UI、问答 REST、诊断运行与 SSE、技能沉淀 | 可用 |
+| [`skills/`](skills/) | 网络、磁盘、服务、日志审计 4 个种子技能和现场沉淀技能 | 可用 |
+| [`eval/`](eval/) | 技能路由、检索和 P0 问答质量门禁 | 可用 |
+| [`tests/`](tests/) | LLM、引擎、安全、HTTP/SSE、双后端与便携包测试 | 可用 |
 | [`docs/`](docs/) | 需求文档、前端方案、RAG 技术路线与交接说明 | — |
+| [`packaging/`](packaging/) | 无下载便携包构建和四平台/后端实机验收说明 | 待目标机验收 |
 | `kb/docs/` | 厂商手册放这里（不进 git） | — |
 | `kb/index.db` | 手册索引（不进 git，可以直接拷给队友） | — |
 
@@ -78,7 +82,10 @@ uv pip install --python .venv/bin/python -r requirements.txt
 .venv/bin/python -m llm ingest
 .venv/bin/python -m llm health      # ollama、model、embed_model、index 都为 true，vectors 等于 chunks 即可
 
-# 3. 试用
+# 3. 启动完整项目
+.venv/bin/python -m ui.server --host 127.0.0.1 --port 8765
+
+# 4. 也可从命令行试用模型/RAG
 .venv/bin/python -m llm route "nginx 起不来"
 .venv/bin/python -m llm search "怎么检查光模块是不是坏了"
 .venv/bin/python -m llm ask "交换机 CPU 占用率高怎么处理"
@@ -94,10 +101,27 @@ Windows 上把命令里的 `.venv/bin/python` 换成 `.venv\Scripts\python`。
 前端是本地 Web 操作台，静态资源由 Python 服务托管，不需要 Node、CDN 或外网请求。
 
 ```bash
-LLM_MOCK=1 .venv/bin/python -m ui.server
+.venv/bin/python -m ui.server
 ```
 
-打开 `http://127.0.0.1:8765` 即可使用。已有 Ollama、模型和索引时，可以去掉 `LLM_MOCK=1` 连接真实 `llm` 接口；采集、规则树、报告和存技能在 `engine/` 接入前使用本地演示流。
+打开 `http://127.0.0.1:8765`。主聊天明确区分“手册问答”和“故障诊断”：前者连接本地 RAG，后者连接真实 `SkillEngine`。诊断还需明确选择“本机只读执行”或带持续标识的“模拟器固定输出”；失败不会偷偷回退为模拟。
+
+四个预置技能都只执行 `collect.yaml` 中通过全局白名单的只读参数数组，始终 `shell=False`。报告中的修复命令只展示、不会执行。诊断完成后可点“存为技能”，后端只接受本服务保存的已完成 `run_id`，重新校验后原子写入 `skills/`。
+
+技能包格式见 [`docs/skill-authoring.md`](docs/skill-authoring.md)，启动、目标和错误恢复见 [`docs/operations-runbook.md`](docs/operations-runbook.md)。
+
+没有模型时可用 `LLM_MOCK=1` 验证问答界面，但 Mock 回答会明确标识，不能用于现场判断。诊断模拟不依赖 `LLM_MOCK`，请在 UI 中显式选择 simulation。
+
+## 便携离线包
+
+仓库提供 macOS/Windows 启动器，以及 Ollama/llama.cpp 两种后端的无下载组装和 SHA-256 校验脚本。构建过程必须显式传入已准备好的对应平台 Python 运行时、模型后端、模型和已发布知识库：
+
+```bash
+python scripts/build_portable.py --help
+python scripts/verify_portable.py /path/to/assembled-package
+```
+
+详见 [`packaging/README.md`](packaging/README.md)。脚本与本机测试通过不等于 FR-10 已通过；仍需在干净 Windows 10+ / macOS 12+ 上分别验证 Ollama 与 llama.cpp 共四组无网启动。
 
 ## 当前结果
 
@@ -107,15 +131,16 @@ LLM_MOCK=1 .venv/bin/python -m ui.server
 | 技能路由耗时 | 平均 0.70 秒/条 | 同上 |
 | 手册检索 | Hit@1 77%，Hit@3 94%（口语题 Hit@3 91%，FR-2 预设题 100%）；只用 BM25 时为 58% / 74%（口语题 45%） | 《华为 S 系列园区交换机维护宝典》第 25 版，BM25 + bge-m3 混合检索，36 题测试集 |
 | 手册检索耗时 | 约 0.05 秒/次 | MacBook Air M4 16GB |
-| 手册问答（`ask`）耗时 | 15 到 50 秒/次，**还没达到每轮 30 秒以内** | 同上，qwen3:8b |
+| 浏览器真实手册问答 | 本次验收样例 25.2 秒，返回已核验回答和真实 PDF 出处 | 同上，qwen3:8b；单样例不替代完整性能门禁 |
+| 诊断闭环 | 真实白名单采集与 simulation 固件均已接入；规则路径、分级报告、出处和技能沉淀可用 | 本机 macOS 验证 |
+| 自动化测试 | 见 `python -m unittest discover -v` 的最新结果 | 不需要外网 |
 
 技能路由的测试集为模板生成的 87 条（测试集中的说法训练与调试时未出现）。手册检索的测试集是调参用的同一批题，没有独立的留出集。两者样本量都小，不代表真实场景的普遍准确率。
 
-## 下一步
+## 仍需外部环境完成的验收
 
-- 手册问答提速（目标每轮 30 秒以内）
-- 检索阶段的拒答：手册里没有的问题直接返回「未找到」，不用等模型
-- 端到端问答评测：检查回答里的命令是否正确、统计误拒率
-- 在 8GB 内存 + qwen3:4b 的配置下测一次
+- 干净 Windows/macOS × Ollama/llama.cpp 四组无网、非管理员、U 盘路径启动记录。
+- 8GB CPU-only 目标机的质量和 30 秒最大耗时复验；若换用 4B/量化模型，必须重跑 `eval/eval_p0_quality.py`。
+- FR-1 的物理断网/关 Wi-Fi、出站连接记录，以及 FR-7 的至少 5 条人工逐结论原手册核对。
 
 RAG 的现状、已知问题和接手方法见 [`docs/rag-handoff.md`](docs/rag-handoff.md)。

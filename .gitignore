@@ -14,3 +14,11 @@ kb/docs/*
 tests/fixtures/
 kb/index.db-journal
 kb/index-*.db
+# Local immutable KB versions and task/upload data
+kb/backups/
+kb/staging/
+kb/quarantine/
+kb/revisions/
+kb/current.json
+kb/.current-*.json
+runtime/

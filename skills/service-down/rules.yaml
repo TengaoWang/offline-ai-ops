@@ -1,0 +1,50 @@
+version: 1
+rules:
+  - id: processes-readable
+    label: 进程列表可读取
+    when: {fact: commands.process-list.status, op: eq, value: success}
+    on_match:
+      branch: process-context
+      finding:
+        severity: ok
+        title: 已采集进程列表
+        symptom: "读取到 ${commands.process-list.parsed.line_count} 条进程记录"
+        root_cause: 该结果仅证明进程列表可读取
+        fix_commands: [结合目标服务名继续人工核对进程]
+        ref_ids: [process-read]
+  - id: sockets-readable
+    label: 端口状态可读取
+    when: {fact: commands.network-sockets.status, op: eq, value: success}
+    on_match:
+      branch: socket-context
+      finding:
+        severity: ok
+        title: 已采集网络连接和监听状态
+        symptom: 端口只读采集成功
+        root_cause: 尚需结合目标端口和服务日志确认故障
+        fix_commands: [核对目标服务端口是否处于监听状态]
+        ref_ids: [socket-read]
+  - id: load-readable
+    label: 系统负载可读取
+    when: {fact: commands.system-load.status, op: eq, value: success}
+    on_match:
+      branch: load-context
+      finding:
+        severity: ok
+        title: 已采集系统负载摘要
+        symptom: uptime 只读采集成功
+        root_cause: 负载摘要不能单独证明服务根因
+        fix_commands: [将负载信息与服务日志一并核对]
+        ref_ids: [load-read]
+  - id: nginx-failed
+    label: nginx 服务状态读取失败或服务异常
+    when: {fact: commands.nginx-status.status, op: ne, value: success}
+    on_match:
+      branch: service-unavailable
+      finding:
+        severity: warning
+        title: 未能确认 nginx 服务为正常状态
+        symptom: systemctl 状态检查未成功
+        root_cause: 可能是服务异常，也可能是目标系统不使用 systemd
+        fix_commands: [在 Linux systemd 目标上人工核对 nginx 状态和日志]
+        ref_ids: [service-read]
