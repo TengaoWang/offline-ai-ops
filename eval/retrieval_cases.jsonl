@@ -14,7 +14,7 @@
 {"id": "fm04", "type": "formal", "query": "CPU 占用率高的故障定位方法", "gold": ["17"], "pair": "co04"}
 {"id": "fm05", "type": "formal", "query": "网络丢包故障排查", "gold": ["9"], "pair": "co05"}
 {"id": "fm06", "type": "formal", "query": "设备异常重启的故障定位", "gold": ["11"], "pair": "co06"}
-{"id": "fm07", "type": "formal", "query": "SSH 登录交换机失败的定位方法", "gold": ["19", "22.3"], "pair": "co07"}
+{"id": "fm07", "type": "formal", "query": "SSH 登录交换机失败的定位方法", "gold": ["19", "22.3", "21.4.1.2"], "pair": "co07"}
 {"id": "fm08", "type": "formal", "query": "交换机忘记登录密码如何修改或清除", "gold": ["22.1"], "pair": "co08"}
 {"id": "fm09", "type": "formal", "query": "交换机如何恢复出厂配置", "gold": ["22.2"], "pair": "co09"}
 {"id": "fm10", "type": "formal", "query": "PoE 设备 PD 供电异常的定位", "gold": ["18"], "pair": "co10"}
@@ -24,7 +24,7 @@
 {"id": "co04", "type": "colloquial", "query": "交换机特别卡，登上去敲命令都很慢", "gold": ["17"], "pair": "fm04"}
 {"id": "co05", "type": "colloquial", "query": "视频会议老是卡，ping 的时候时不时丢几个包", "gold": ["9"], "pair": "fm05"}
 {"id": "co06", "type": "colloquial", "query": "交换机隔一会儿就自己重启一次", "gold": ["11"], "pair": "fm06"}
-{"id": "co07", "type": "colloquial", "query": "用 SSH 连交换机一直连不上", "gold": ["19", "22.3"], "pair": "fm07"}
+{"id": "co07", "type": "colloquial", "query": "用 SSH 连交换机一直连不上", "gold": ["19", "22.3", "21.4.1.2"], "pair": "fm07"}
 {"id": "co08", "type": "colloquial", "query": "交换机密码忘了进不去了", "gold": ["22.1"], "pair": "fm08"}
 {"id": "co09", "type": "colloquial", "query": "想把交换机清空，变回刚买来的样子", "gold": ["22.2"], "pair": "fm09"}
 {"id": "co10", "type": "colloquial", "query": "摄像头和 AP 插到交换机上不通电不亮", "gold": ["18"], "pair": "fm10"}
