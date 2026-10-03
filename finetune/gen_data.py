@@ -12,21 +12,12 @@
 import argparse
 import json
 import random
+import sys
 from pathlib import Path
 
-SKILLS = ["net-unreachable", "disk-full", "service-down", "log-audit"]
-
-# 训练与推理必须使用同一份系统提示词（eval.py 从这里导入）
-SYSTEM_PROMPT = """你是离线机房运维助手的「技能路由」。根据用户对故障或需求的描述，选择一个最合适的技能包。
-只输出一行 JSON：{"skill": "<技能ID>"}；如果都不匹配，输出 {"skill": null}。
-
-可选技能：
-- net-unreachable：网络不通、ping 不通、连不上某台服务器或设备、丢包、网关、网线、交换机端口、VLAN
-- disk-full：磁盘或分区空间不足、硬盘满了、C 盘或 /var 满、inode 耗尽、写不进文件
-- service-down：某个服务或进程起不来、挂了、崩溃、反复重启、端口没在监听、网站或系统打不开但网络是通的
-- log-audit：查看或分析日志、异常登录、可疑操作、安全审计、谁动过配置
-
-与机房运维无关的问题（打印机、办公软件、账号申请、生活问题等）输出 {"skill": null}。"""
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# 训练、评测与线上调用必须使用同一份系统提示词，唯一来源是 router/router.py
+from llm.router import SKILLS, SYSTEM_PROMPT  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # 槽位：让同一个说法模板生成多个不同的具体样本

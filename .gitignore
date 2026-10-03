@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+# 模型和索引不进 git（体积大，放 SSD）
+models/
+*.gguf
+kb/index.db
+.Rhistory
