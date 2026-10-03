@@ -28,7 +28,8 @@ TOP_N = 10  # 统计 MRR 时看前多少名
 
 
 def section_pages(pdf_path: Path) -> dict[str, tuple[int, int]]:
-    """章节号 -> (起始页, 结束页)。结束页 = 下一个同级或更高级章节的起始页 - 1。"""
+    """章节号 -> (起始页, 结束页)。结束页 = 下一个同级或更高级章节的起始页
+    （章节常在页面中间结束，下一节开始的那一页也可能有本节内容）。"""
     toc = pymupdf.open(pdf_path).get_toc()
     ranges = {}
     for i, (level, title, start) in enumerate(toc):
@@ -36,7 +37,7 @@ def section_pages(pdf_path: Path) -> dict[str, tuple[int, int]]:
         end = start
         for next_level, _, next_start in toc[i + 1:]:
             if next_level <= level:
-                end = max(start, next_start - 1)
+                end = max(start, next_start)
                 break
         ranges.setdefault(number, (start, end))
     return ranges
