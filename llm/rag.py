@@ -1,9 +1,10 @@
-"""手册检索与带出处的问答（简单版：BM25 关键词检索，未做向量检索和重排序）。
+"""手册检索与带出处的问答：BM25 关键词检索 + 向量检索，用 RRF 合并。
 
 流程：
   ingest()   把 kb/docs/ 下的 PDF / Markdown / TXT 切成小段，记下文件名、页码、章节，
-             用 jieba 分词后存进 SQLite FTS5 索引（kb/index.db）
-  retrieve() 用 BM25 找出最相关的几段
+             用 jieba 分词后存进 SQLite FTS5 索引（kb/index.db）；
+             向量模型可用时，再给每段算向量存进同一个文件
+  retrieve() BM25 和向量各取前 20 段，按名次用 RRF 合并；向量不可用时只用 BM25
   ask()      把这几段编号 [1]..[k] 交给模型；模型只能引用编号，由程序映射回真实的
              文件名 / 页码 / 章节，所以出处不会被模型编造；找不到依据时明确说没找到
 """
@@ -12,12 +13,15 @@ import json
 import logging
 import re
 import sqlite3
+import sys
 import time
 import warnings
 from pathlib import Path
 
+import numpy as np
+
 from . import config
-from .client import chat
+from .client import LLMError, chat, embed
 
 with warnings.catch_warnings():  # jieba 在 Python 3.12 下会打印无害的 SyntaxWarning
     warnings.simplefilter("ignore", SyntaxWarning)
@@ -28,6 +32,9 @@ NOT_FOUND = "手册中未找到依据。"
 CHUNK_CHARS = 600     # 每段最多字符数
 OVERLAP_CHARS = 100   # 相邻两段的重叠，避免一句话被切断后检索不到
 HEADING_WEIGHT = 1.0  # 章节标题命中的权重（相对正文）；在维护宝典上试过 1/2/3，1 整体最好
+CANDIDATES = 20       # 混合检索时，BM25 和向量各取多少段参与合并
+RRF_K = 60            # RRF 公式 1/(RRF_K + 名次) 里的常数，60 是论文和业界的常用值
+EMBED_BATCH = 32      # 建向量时每次送给模型的段数
 
 ANSWER_PROMPT = """你是离线机房运维助手。只能根据下面带编号的手册片段回答用户问题。
 规则：
@@ -140,7 +147,48 @@ def ingest(docs_dir: Path | str | None = None, index_path: Path | str | None = N
                 count += 1
     db.commit()
     db.close()
-    return {"files": len(files), "chunks": count}
+    stats = {"files": len(files), "chunks": count, "vectors": None}
+    if config.EMBED_MODEL and not config.MOCK:
+        try:
+            stats["vectors"] = build_vectors(index_path=index_path)
+        except LLMError as e:  # 没有向量模型也能用，只是退回 BM25
+            stats["vectors"] = f"未生成：{e}"
+    return stats
+
+
+def _embed_text(section: str, text: str) -> str:
+    """向量化时把章节标题放在正文前，标题里的关键词（如「接口物理DOWN」）也能被检索到。"""
+    return f"{section}\n{text}" if section else text
+
+
+def build_vectors(model: str | None = None, index_path: Path | str | None = None) -> dict:
+    """给索引里的每一段算向量，存进 vectors 表。同一个索引可以存多个向量模型的结果。"""
+    model = model or config.EMBED_MODEL
+    index_path = Path(index_path or config.INDEX_PATH)
+    start = time.perf_counter()
+    db = sqlite3.connect(index_path)
+    db.execute("CREATE TABLE IF NOT EXISTS vectors (model TEXT, id INTEGER, vec BLOB, PRIMARY KEY (model, id))")
+    db.execute("DELETE FROM vectors WHERE model = ?", (model,))
+    rows = db.execute("SELECT id, section, text FROM chunks ORDER BY id").fetchall()
+    for i in range(0, len(rows), EMBED_BATCH):
+        batch = rows[i:i + EMBED_BATCH]
+        vectors = embed([_embed_text(section, text) for _, section, text in batch], model)
+        db.executemany("INSERT INTO vectors (model, id, vec) VALUES (?, ?, ?)",
+                       [(model, row[0], _normalize(v).tobytes()) for row, v in zip(batch, vectors)])
+        done = i + len(batch)
+        if done % (EMBED_BATCH * 20) == 0 or done == len(rows):
+            print(f"\r向量化 {model}：{done}/{len(rows)}  {time.perf_counter() - start:.0f} 秒",
+                  end="", file=sys.stderr, flush=True)
+    print(file=sys.stderr)
+    db.commit()
+    db.close()
+    _VECTOR_CACHE.clear()
+    return {"model": model, "vectors": len(rows), "seconds": round(time.perf_counter() - start, 1)}
+
+
+def _normalize(vector) -> np.ndarray:
+    v = np.asarray(vector, dtype=np.float32)
+    return v / (np.linalg.norm(v) or 1.0)
 
 
 # ---------------------------------------------------------------------------
@@ -155,29 +203,100 @@ _MOCK_CHUNKS = [
 ]
 
 
-def retrieve(query: str, k: int = 5, index_path: Path | str | None = None) -> list[dict]:
-    """返回最相关的 k 段：[{"id", "text", "file", "page", "section", "score"}]，score 越大越相关。
+_VECTOR_CACHE: dict = {}
 
-    page 为 None 表示来自没有页码的 Markdown / TXT 文件。
-    """
-    if config.MOCK:
-        return _MOCK_CHUNKS[:k]
-    index_path = Path(index_path or config.INDEX_PATH)
-    if not index_path.exists():
-        raise FileNotFoundError(f"索引不存在：{index_path}，请先运行 python -m llm ingest")
+
+def _load_vectors(index_path: Path, model: str):
+    """读出某个向量模型的全部向量，返回 (段 id 数组, 向量矩阵)；没有就返回 None。结果缓存在内存里。"""
+    key = (str(index_path), model, index_path.stat().st_mtime)
+    if key not in _VECTOR_CACHE:
+        db = sqlite3.connect(index_path)
+        try:
+            rows = db.execute("SELECT id, vec FROM vectors WHERE model = ? ORDER BY id", (model,)).fetchall()
+        except sqlite3.OperationalError:  # 旧索引没有 vectors 表
+            rows = []
+        db.close()
+        _VECTOR_CACHE[key] = (np.array([r[0] for r in rows]),
+                              np.stack([np.frombuffer(r[1], dtype=np.float32) for r in rows])) if rows else None
+    return _VECTOR_CACHE[key]
+
+
+def _query_text(query: str, model: str) -> str:
+    """Qwen3-Embedding 要求查询前加任务说明（文档片段不用加），效果更好。"""
+    if "qwen3-embedding" in model:
+        return f"Instruct: Given a question about network switch maintenance, retrieve manual passages that answer it\nQuery: {query}"
+    return query
+
+
+def _bm25_ranking(db, query: str, n: int) -> list[tuple[int, float]]:
     terms = [t for t in _tokenize(query).split() if len(t) > 1 or not t.isascii()]
     if not terms:
         return []
     match = " OR ".join('"' + t.replace('"', '""') + '"' for t in dict.fromkeys(terms))
+    return db.execute(
+        f"SELECT rowid, -bm25(fts, {HEADING_WEIGHT}, 1.0) AS score FROM fts WHERE fts MATCH ? "
+        "ORDER BY score DESC LIMIT ?", (match, n)).fetchall()
+
+
+def _vector_ranking(query: str, index_path: Path, n: int) -> list[tuple[int, float]] | None:
+    """返回 [(段 id, 余弦相似度)]；向量模型或向量不可用时返回 None。"""
+    model = config.EMBED_MODEL
+    if not model:
+        return None
+    loaded = _load_vectors(index_path, model)
+    if loaded is None:
+        return None
+    ids, matrix = loaded
+    try:
+        q = _normalize(embed([_query_text(query, model)], model)[0])
+    except LLMError:
+        return None
+    sims = matrix @ q
+    top = np.argsort(-sims)[:n]
+    return [(int(ids[i]), float(sims[i])) for i in top]
+
+
+def retrieve(query: str, k: int = 5, index_path: Path | str | None = None, mode: str | None = None) -> list[dict]:
+    """返回最相关的 k 段：[{"id", "text", "file", "page", "section", "label", "score", "vec_score", "mode"}]。
+
+    score 越大越相关（hybrid 为 RRF 分数，bm25 为 BM25 分数，vector 为余弦相似度）；
+    vec_score 为向量余弦相似度（没有向量时为 None），可用来判断「手册里有没有相关内容」；
+    mode 为实际使用的检索方式。page 为 None 表示来自没有页码的 Markdown / TXT 文件。
+    """
+    if config.MOCK:
+        return [c | {"label": _cite_label(c), "vec_score": None, "mode": "mock"} for c in _MOCK_CHUNKS[:k]]
+    index_path = Path(index_path or config.INDEX_PATH)
+    if not index_path.exists():
+        raise FileNotFoundError(f"索引不存在：{index_path}，请先运行 python -m llm ingest")
+    mode = mode or config.RETRIEVE_MODE
+
     db = sqlite3.connect(index_path)
-    rows = db.execute(
-        f"SELECT c.id, c.text, c.file, c.page, c.section, -bm25(fts, {HEADING_WEIGHT}, 1.0) AS score "
-        "FROM fts JOIN chunks c ON c.id = fts.rowid WHERE fts MATCH ? ORDER BY score DESC LIMIT ?",
-        (match, k),
-    ).fetchall()
+    vector = _vector_ranking(query, index_path, max(k, CANDIDATES)) if mode in ("hybrid", "vector") else None
+    if vector is None:
+        mode = "bm25"
+    bm25 = _bm25_ranking(db, query, max(k, CANDIDATES)) if mode in ("hybrid", "bm25") else []
+
+    vec_scores = dict(vector or [])
+    if mode == "bm25":
+        ranked = bm25[:k]
+    elif mode == "vector":
+        ranked = vector[:k]
+    else:  # RRF：每一路里排第 r 名得 1/(RRF_K + r) 分，两路相加
+        fused: dict[int, float] = {}
+        for ranking in (bm25, vector):
+            for rank, (chunk_id, _) in enumerate(ranking, start=1):
+                fused[chunk_id] = fused.get(chunk_id, 0.0) + 1 / (RRF_K + rank)
+        ranked = sorted(fused.items(), key=lambda x: -x[1])[:k]
+
+    results = []
+    for chunk_id, score in ranked:
+        row = db.execute("SELECT id, text, file, page, section FROM chunks WHERE id = ?", (chunk_id,)).fetchone()
+        chunk = dict(zip(["id", "text", "file", "page", "section"], row))
+        vs = vec_scores.get(chunk_id)
+        results.append(chunk | {"label": _cite_label(chunk), "score": round(score, 4),
+                                "vec_score": round(vs, 4) if vs is not None else None, "mode": mode})
     db.close()
-    keys = ["id", "text", "file", "page", "section", "score"]
-    return [dict(zip(keys, row)) | {"score": round(row[5], 3)} for row in rows]
+    return results
 
 
 def _cite_label(chunk: dict) -> str:

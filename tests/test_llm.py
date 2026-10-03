@@ -15,8 +15,12 @@ from tests.make_fixture import build  # noqa: E402
 
 
 class RetrieveTest(unittest.TestCase):
+    """只测 BM25 这一路（关闭向量模型），不需要 Ollama。"""
+
     @classmethod
     def setUpClass(cls):
+        cls._embed_model = config.EMBED_MODEL
+        config.EMBED_MODEL = ""
         cls.tmp = tempfile.TemporaryDirectory()
         docs = Path(cls.tmp.name) / "docs"
         build(docs / "测试手册.pdf")
@@ -25,6 +29,7 @@ class RetrieveTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        config.EMBED_MODEL = cls._embed_model
         cls.tmp.cleanup()
 
     def test_ingest_counts(self):
@@ -43,6 +48,46 @@ class RetrieveTest(unittest.TestCase):
 
     def test_no_match_returns_empty(self):
         self.assertEqual(rag.retrieve("天气预报", k=3, index_path=self.index), [])
+
+    def test_falls_back_to_bm25_without_vectors(self):
+        top = rag.retrieve("trunk allow-pass vlan", k=1, index_path=self.index, mode="hybrid")[0]
+        self.assertEqual(top["mode"], "bm25")
+        self.assertIsNone(top["vec_score"])
+
+
+class HybridTest(unittest.TestCase):
+    """用假的向量模型测混合检索（RRF 合并），不需要 Ollama。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._embed_model, cls._embed = config.EMBED_MODEL, rag.embed
+        config.EMBED_MODEL = "fake-embed"
+        # 假向量：文本里含「恢复」的指向第一维，其余指向第二维
+        rag.embed = lambda texts, model: [[1.0, 0.0] if "恢复" in t or "undo" in t else [0.0, 1.0] for t in texts]
+        cls.tmp = tempfile.TemporaryDirectory()
+        docs = Path(cls.tmp.name) / "docs"
+        build(docs / "测试手册.pdf")
+        cls.index = Path(cls.tmp.name) / "index.db"
+        cls.stats = rag.ingest(docs, cls.index)
+
+    @classmethod
+    def tearDownClass(cls):
+        config.EMBED_MODEL, rag.embed = cls._embed_model, cls._embed
+        cls.tmp.cleanup()
+
+    def test_vectors_built_for_every_chunk(self):
+        self.assertEqual(self.stats["vectors"]["vectors"], self.stats["chunks"])
+
+    def test_vector_finds_page_without_shared_keywords(self):
+        top = rag.retrieve("恢复", k=1, index_path=self.index, mode="vector")[0]
+        self.assertEqual(top["page"], 3)
+        self.assertEqual(top["mode"], "vector")
+
+    def test_hybrid_merges_both_rankings(self):
+        results = rag.retrieve("trunk 恢复", k=3, index_path=self.index, mode="hybrid")
+        self.assertEqual(results[0]["mode"], "hybrid")
+        self.assertEqual({r["page"] for r in results[:2]}, {1, 3})
+        self.assertIn("label", results[0])
 
 
 class MockModeTest(unittest.TestCase):
