@@ -7,13 +7,14 @@
   python -m llm ask "怎么配置 trunk"    带出处的问答
 
 search / ask 默认输出给人看的格式；加 --json 输出原始数据（和 Python 接口的返回值相同）。
+search 列出结果后，可以输入编号查看那一条的全文（含同一小节的前后段）；加 --full 一次显示全部全文。
 """
 
 import json
 import sys
 
 from . import ask, health, ingest, retrieve, route
-from .rag import _tokenize, build_vectors
+from .rag import _tokenize, _with_neighbors, build_vectors
 
 PREVIEW_CHARS = 120  # search 结果每段预览多少字
 
@@ -42,18 +43,34 @@ def _print_search(query: str, results: list[dict]):
     if not results:
         print("没有找到相关内容。")
         return
-    mode = results[0]["mode"]
     for n, r in enumerate(results, 1):
-        found_by = []  # 这一段在两路检索里各排第几
-        if r.get("bm25_rank"):
-            found_by.append(f"关键词第 {r['bm25_rank']} 名")
-        if r.get("vec_rank"):
-            found_by.append(f"向量第 {r['vec_rank']} 名（相似度 {r['vec_score']:.3f}）")
-        print(f"[{n}] 分数 {r['score']:.4f}  {_short_label(r)}")
-        if found_by:
-            print(f"    来自：{'，'.join(found_by)}")
+        print(f"[{n}] {_short_label(r)}")
         print(f"    {_preview(query, r['text'])}\n")
-    print(f"检索方式：{mode}" + ("（分数 = 两路名次合并的 RRF 分数，从高到低排）" if mode == "hybrid" else ""))
+    print("按可能性从高到低排列（各项分数见 --json）")
+
+
+def _print_full(result: dict):
+    """显示一条结果的全文：命中段 + 同一小节的前后相邻段（和 ask() 交给模型的资料一样）。"""
+    passage = _with_neighbors([result])[0]
+    print(f"\n{'=' * 60}\n{_short_label(passage)}\n{passage['section']}\n{'=' * 60}")
+    print(passage["text"])
+    print("=" * 60)
+
+
+def _browse(results: list[dict]):
+    """列出结果后，输入编号看全文；直接回车退出。只在终端里交互使用时启用。"""
+    while True:
+        try:
+            choice = input(f"\n输入编号（1-{len(results)}）查看全文，直接回车退出：").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return
+        if not choice:
+            return
+        if choice.isdigit() and 1 <= int(choice) <= len(results):
+            _print_full(results[int(choice) - 1])
+        else:
+            print("请输入列表里的编号。")
 
 
 def _print_ask(question: str, result: dict):
@@ -68,8 +85,9 @@ def _print_ask(question: str, result: dict):
 
 
 def main():
-    args = [a for a in sys.argv[1:] if a != "--json"]
+    args = [a for a in sys.argv[1:] if a not in ("--json", "--full")]
     as_json = "--json" in sys.argv[1:]
+    full = "--full" in sys.argv[1:]
     if not args or args[0] not in {"health", "ingest", "embed", "route", "search", "ask"}:
         sys.exit(__doc__)
     command, rest = args[0], " ".join(args[1:])
@@ -86,7 +104,13 @@ def main():
     elif command == "search":
         result = retrieve(rest)
         if not as_json:
-            return _print_search(rest, result)
+            _print_search(rest, result)
+            if full:
+                for r in result:
+                    _print_full(r)
+            elif result and sys.stdin.isatty() and sys.stdout.isatty():
+                _browse(result)
+            return
     else:
         result = ask(rest)
         if not as_json:

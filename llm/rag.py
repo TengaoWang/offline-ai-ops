@@ -5,7 +5,7 @@
              每节再切成不超过 600 字的段，记下文件名、起始页码、章节，
              用 jieba 分词后存进 SQLite FTS5 索引（kb/index.db）；
              向量模型可用时，再给每段算向量存进同一个文件
-  retrieve() BM25 和向量各取前 20 段，按名次用 RRF 合并；向量不可用时只用 BM25
+  retrieve() BM25 和向量各取前 20 段，按名次用加权 RRF 合并（向量权重 2）；向量不可用时只用 BM25
   ask()      把这几段编号 [1]..[k] 交给模型；模型只能引用编号，由程序映射回真实的
              文件名 / 页码 / 章节，所以出处不会被模型编造；找不到依据时明确说没找到
 """
@@ -38,6 +38,7 @@ TITLE_MATCH_CHARS = 12  # 用标题前多少个字（去掉空白）在正文里
 HEADING_WEIGHT = 1.0  # 章节标题命中的权重（相对正文）；在维护宝典上试过 1/2/3，1 整体最好
 CANDIDATES = 20       # 混合检索时，BM25 和向量各取多少段参与合并
 RRF_K = 60            # RRF 公式 1/(RRF_K + 名次) 里的常数，60 是论文和业界的常用值
+VECTOR_WEIGHT = 2.0   # 合并时向量这一路的权重（BM25 为 1）；测试集上 1.5 到 3 结果相同，取中间值
 EMBED_BATCH = 32      # 建向量时每次送给模型的段数
 ASK_PASSAGES = 3      # ask() 最多交给模型几段资料（每段 = 命中段 + 同一小节的前后相邻段）
 NEIGHBORS = 1         # 命中一段时，前后各补几段（同一小节内）
@@ -369,11 +370,11 @@ def retrieve(query: str, k: int = 5, index_path: Path | str | None = None, mode:
         ranked = bm25
     elif mode == "vector":
         ranked = vector
-    else:  # RRF：每一路里排第 r 名得 1/(RRF_K + r) 分，两路相加
+    else:  # 加权 RRF：每一路里排第 r 名得 权重/(RRF_K + r) 分，两路相加
         fused: dict[int, float] = {}
-        for ranking in (bm25, vector):
+        for weight, ranking in ((1.0, bm25), (VECTOR_WEIGHT, vector)):
             for rank, (chunk_id, _) in enumerate(ranking, start=1):
-                fused[chunk_id] = fused.get(chunk_id, 0.0) + 1 / (RRF_K + rank)
+                fused[chunk_id] = fused.get(chunk_id, 0.0) + weight / (RRF_K + rank)
         ranked = sorted(fused.items(), key=lambda x: -x[1])
 
     # 同一小节只保留分数最高的一段，避免前几名被同一节占满（ask() 会再补上同一节的相邻段）
