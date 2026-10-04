@@ -81,7 +81,7 @@ llm/  cite.py 章节号 → 真实页码；rag.py 手册混合检索（BM25 + bg
 - 新增 `engine/skill_engine.py` 适配层，接口和原来的 `SkillEngine` 一致，**`ui/` 没有改动**。
 - 保留 Haward 的 `ui/`、llama.cpp 后端、索引快照、英文问答、打包脚本、评测和界面测试。
 - 替换了他的引擎（`executor.py`、`rules.py`、`skill_loader.py`）和 4 个技能内容，删除 `saved-7ce098e844d8` 和旧的 `saved-skill-1791027243`。
-- 对话里排查和长期记忆默认关闭（`answer(..., diagnose=True)` 才打开），界面问答行为不变。
+- 网页主对话已用 `answer(..., diagnose=True)` 接入对话排查和长期记忆；独立「知识问答」页保持纯 RAG，不会执行技能或写入记忆。
 
 **待对齐**：Haward 的 `eval/eval_p0_diagnostics.py` 要求「每条结论都有出处，否则不发布」；本方案是照常显示并标「手册中未找到依据」（FR-7），因此该评测有 2 项不通过。
 
@@ -102,7 +102,7 @@ llm/  cite.py 章节号 → 真实页码；rag.py 手册混合检索（BM25 + bg
 3. 调度器的两处回归（应追问的笼统问题）。
 4. 记忆检索相关度门槛偏宽；同一问题多次排查会重复记录，可以合并成一条并记下次数。
 5. 只说「一键体检」时会随便选一个技能，应让用户选择。
-6. 界面问答框可选接入 `diagnose=True`（说明见 [`frontend-answer.md`](frontend-answer.md) 第 11 节）。
+6. 持续补充真实设备连接适配；当前交换机命令仍使用明确标识的手册示例回放。
 
 ## 9. 相关文档
 

@@ -37,8 +37,8 @@ def _fallback_title(text: str, skill_id: str | None, locale: str) -> str:
     is_mes = bool(re.search(r"mes", text, re.I))
     titles = {
         "net-unreachable": ("MES network connectivity issue" if is_mes else "Network connectivity issue", "MES 业务网连通异常" if is_mes else "网络连通异常"),
-        "disk-full": ("Server disk space alert", "服务器磁盘空间告警"),
-        "service-down": ("Service startup failure", "服务启动故障"),
+        "disk-full": ("Switch storage alert", "交换机存储空间告警"),
+        "service-down": ("Switch login failure", "交换机登录故障"),
         "log-audit": ("Log audit · suspicious activity", "日志审计 · 异常活动"),
     }
     if skill_id in titles:
@@ -159,6 +159,8 @@ class UIHandler(BaseHTTPRequestHandler):
                 self._send_json({"skills": list_skill_cards()})
             elif parsed.path == "/api/manuals/samples":
                 self._send_json({"samples": index_samples()})
+            elif parsed.path == "/api/memory":
+                self._send_json(operations.list_memories())
             elif parsed.path.startswith("/api/manuals/jobs/"):
                 self._send_json(operations.job(parsed.path.rsplit("/", 1)[-1]))
             elif parsed.path.startswith("/api/diagnose/runs/") and parsed.path.endswith("/events"):
@@ -192,8 +194,20 @@ class UIHandler(BaseHTTPRequestHandler):
                 self._handle_upload()
             elif parsed.path == "/api/manuals/ingest":
                 self._send_json(operations.start_build(self._read_json_body()), status=202)
+            elif parsed.path == "/api/simulator/check":
+                self._send_json(operations.simulator_check(self._read_json_body()))
             elif parsed.path in {"/api/skills/save", "/api/save-skill"}:
                 self._handle_save_skill()
+            else:
+                self._send_json({"error": "not_found"}, status=404)
+        except Exception as exc:
+            self._failure(exc)
+
+    def do_DELETE(self) -> None:
+        parsed = urllib.parse.urlparse(self.path)
+        try:
+            if parsed.path.startswith("/api/memory/"):
+                self._send_json(operations.forget_memory(parsed.path.rsplit("/", 1)[-1]))
             else:
                 self._send_json({"error": "not_found"}, status=404)
         except Exception as exc:

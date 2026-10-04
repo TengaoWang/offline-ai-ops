@@ -5,9 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#f6f7f8">
     <title>离线 AI 运维助手</title>
-    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="./styles.css">
   </head>
   <body>
+    <section class="direct-open-notice" id="directOpenNotice" role="alert" hidden>
+      <div>
+        <strong>请通过本机服务打开此页面</strong>
+        <p>当前是直接打开的静态文件，无法连接知识库、模型和诊断接口。请先在项目目录启动服务，再访问下方地址。</p>
+        <code>.venv/bin/python -m ui.server --host 127.0.0.1 --port 8765</code>
+      </div>
+      <a href="http://127.0.0.1:8765/">打开 http://127.0.0.1:8765</a>
+    </section>
     <div class="app-shell">
       <aside class="sidebar" aria-label="主导航">
         <a class="brand" href="#chat" aria-label="离线 AI 运维助手首页">
@@ -27,6 +35,7 @@
           <button class="nav-item active" id="navChat" type="button" data-view="chat"><span class="nav-glyph" aria-hidden="true">◉</span><span>诊断对话</span></button>
           <button class="nav-item" id="navQA" type="button" data-view="qa"><span class="nav-glyph" aria-hidden="true">⌕</span><span>知识问答</span></button>
           <button class="nav-item" id="navManuals" type="button" data-view="manuals"><span class="nav-glyph" aria-hidden="true">▤</span><span>手册与索引</span></button>
+          <button class="nav-item" id="navMemory" type="button" data-view="memory"><span class="nav-glyph" aria-hidden="true">◇</span><span>长期记忆</span></button>
           <button class="nav-item" id="navEvidence" type="button" data-view="evidence"><span class="nav-glyph" aria-hidden="true">▥</span><span>Evidence 对比</span></button>
         </nav>
 
@@ -35,8 +44,8 @@
 
         <div class="sidebar-section-label">演示场景</div>
         <button class="recent-item" type="button" data-prompt="MES 服务器业务网不通，管理口还能 ping 通"><span class="recent-mark network"></span><span>生产网中断</span></button>
-        <button class="recent-item" type="button" data-prompt="服务器磁盘空间告警，只剩 200MB"><span class="recent-mark disk"></span><span>磁盘空间告警</span></button>
-        <button class="recent-item" type="button" data-prompt="nginx 服务起不来，页面返回 502"><span class="recent-mark service"></span><span>服务启动失败</span></button>
+        <button class="recent-item" type="button" data-prompt="交换机 Flash 存储空间不足，升级提示空间不够"><span class="recent-mark disk"></span><span>交换机存储告警</span></button>
+        <button class="recent-item" type="button" data-prompt="交换机 SSH 一直登不上，请排查"><span class="recent-mark service"></span><span>交换机登录失败</span></button>
 
         <div class="sidebar-spacer"></div>
         <button class="nav-item system-nav" id="navStatus" type="button" data-view="status"><span class="nav-glyph" aria-hidden="true">⚙</span><span>系统状态</span><span class="nav-status-dot" id="navStatusDot"></span></button>
@@ -85,8 +94,8 @@
                       <p class="demo-source-note">请选择“手册问答”或“故障诊断”。诊断模式会执行所选模式对应的白名单只读采集。</p>
                       <div class="suggestion-list">
                         <button type="button" class="suggestion-chip" data-prompt="MES 服务器业务网不通，管理口还能 ping 通" data-prompt-en="The MES business network is unreachable, but the management interface can still ping.">MES 业务网不通，管理口正常</button>
-                        <button type="button" class="suggestion-chip" data-prompt="服务器磁盘空间告警，只剩 200MB" data-prompt-en="The server disk is almost full, with only 200 MB remaining.">服务器磁盘空间告警</button>
-                        <button type="button" class="suggestion-chip" data-prompt="nginx 服务起不来，页面返回 502" data-prompt-en="The nginx service will not start and the page returns HTTP 502.">nginx 服务返回 502</button>
+                        <button type="button" class="suggestion-chip" data-prompt="交换机 Flash 存储空间不足，升级提示空间不够" data-prompt-en="The switch reports insufficient Flash space during an upgrade.">交换机存储空间告警</button>
+                        <button type="button" class="suggestion-chip" data-prompt="交换机 SSH 一直登不上，请排查" data-prompt-en="SSH login to the switch keeps failing; please diagnose it.">交换机 SSH 登录失败</button>
                       </div>
                     </div>
                   </div>
@@ -167,6 +176,12 @@
           <div class="sample-section"><div class="section-title-row"><div><h2>解析样例</h2><p>抽样展示文件、章节、页码和原文片段</p></div><span class="sample-count" id="sampleCount">0 条</span></div><div class="sample-list" id="sampleList"></div></div>
         </section>
 
+        <section class="page-view secondary-view" id="memoryView" aria-labelledby="memoryTitle" hidden>
+          <div class="subpage-heading"><div><p class="eyebrow">本机经验库</p><h1 id="memoryTitle">长期记忆</h1><p>查看 Agent 记住的现场信息和历史排障记录；所有内容只保存在本机。</p></div><span class="view-mark">◇</span></div>
+          <div class="memory-summary" id="memorySummary">正在读取本机记忆…</div>
+          <div class="memory-list" id="memoryList" aria-live="polite"></div>
+        </section>
+
         <section class="page-view secondary-view" id="evidenceView" aria-labelledby="evidenceTitle" hidden>
           <div class="subpage-heading"><div><p class="eyebrow">答辩数据</p><h1 id="evidenceTitle">Evidence 对比</h1><p>记录同一场景下的手动排障与 AI 排障数据。</p></div><span class="view-mark">▥</span></div>
           <div class="evidence-layout">
@@ -191,13 +206,13 @@
           <div class="status-summary-card" id="statusSummaryCard"></div>
           <div class="status-table" id="statusTable"></div>
           <section class="simulator-card" aria-labelledby="simulatorTitle">
-            <div class="section-title-row"><div><h2 id="simulatorTitle">交换机测试模拟器</h2><p>本机 Mock 命令台，仅返回固定样例，不连接真实设备，也不会执行系统命令。</p></div><span class="simulator-tag">P00 · 本地模拟</span></div>
+            <div class="section-title-row"><div><h2 id="simulatorTitle">交换机测试模拟器</h2><p>命令提交到本机后端白名单校验，通过后仅返回固定样例，不连接真实设备。</p></div><span class="simulator-tag">后端白名单 · 本地模拟</span></div>
             <form class="simulator-form" id="simulatorForm"><label for="simulatorCommand">输入模拟命令</label><div class="simulator-command-row"><input id="simulatorCommand" type="text" value="display interface brief" autocomplete="off" spellcheck="false"><button class="primary-button" type="submit">运行模拟</button></div></form>
             <div class="simulator-examples" aria-label="模拟命令示例"><button type="button" data-sim-command="display version">display version</button><button type="button" data-sim-command="display interface brief">display interface brief</button><button type="button" data-sim-command="ping 1.1.1.1; rm -rf /">注入拦截示例</button></div>
             <div class="simulator-output" id="simulatorOutput" role="status" aria-live="polite"><strong>等待输入</strong><p>运行模拟命令后，结果会显示在此区域。</p></div>
           </section>
           <div class="offline-info packaging-status"><strong>便携启动状态 · FR-10</strong><p>发布脚本会核对本地运行时、模型、索引和校验清单；实际 Windows/macOS 无网验收状态以发布报告为准。</p></div>
-          <div class="offline-info api-contract-card"><strong>后端接口</strong><p>前端只通过本机 API 读取模型、知识库和真实诊断结果。</p><code>GET /api/health · GET /api/skills · POST /api/ask<br>POST /api/diagnose/runs · GET /api/diagnose/runs/{id}/events<br>GET /api/diagnose/runs/{id} · POST /api/skills/save<br>POST /api/manuals/upload · POST /api/manuals/ingest</code></div>
+          <div class="offline-info api-contract-card"><strong>后端接口</strong><p>前端只通过本机 API 读取模型、知识库、长期记忆和真实诊断结果。</p><code>GET /api/health · GET /api/skills · POST /api/ask<br>POST /api/diagnose/runs · GET /api/diagnose/runs/{id}/events<br>GET/DELETE /api/memory · POST /api/simulator/check<br>POST /api/skills/save · POST /api/manuals/upload · POST /api/manuals/ingest</code></div>
           <div class="offline-info"><strong>离线运行说明</strong><p>前端静态资源由本地 Python 服务托管。模型、知识库、诊断结果和 Evidence 数据均留在本机，不加载 CDN 或外部资源。</p><code>服务地址：127.0.0.1</code></div>
         </section>
       </main>
@@ -240,6 +255,6 @@
       <form method="dialog" onsubmit="return false"><div class="dialog-head"><div><p class="eyebrow">知识沉淀</p><h2>存为可复用技能</h2></div><button class="icon-button" id="closeSkillDialog" type="button" aria-label="关闭">×</button></div><p class="dialog-intro">根据本次采集与判定生成技能草稿。保存后会写入本机 skills/ 目录。</p><label class="field"><span>新技能名称</span><input id="skillName" type="text" value="现场沉淀技能" data-i18n-value-zh="现场沉淀技能" data-i18n-value-en="Field-derived skill"></label><pre id="draftPreview" class="draft-preview"></pre><div class="dialog-footer"><p class="inline-message" id="saveSkillResult" aria-live="polite"></p><div class="button-row"><button class="secondary-button" id="cancelSkillSave" type="button">稍后再说</button><button class="primary-button" id="saveSkillBtn" type="button">确认保存</button></div></div></form>
     </dialog>
 
-    <script src="/app.js"></script>
+    <script src="./app.js"></script>
   </body>
 </html>

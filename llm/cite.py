@@ -13,7 +13,7 @@ import re
 import sqlite3
 from pathlib import Path
 
-from . import config
+from . import config, kb
 from .rag import _cite_label, retrieve
 
 EXCERPT_CHARS = 300
@@ -48,7 +48,9 @@ def cite(sections: list[str] | tuple[str, ...] = (), query: str | None = None,
 
     via：section（按章节号查到）/ search（章节号都没找到，按 query 检索到的第一段）。
     两种方式都找不到时返回 []。"""
-    path = Path(index_path) if index_path else config.INDEX_PATH
+    # Always follow the immutable, currently published knowledge-base revision.
+    # config.INDEX_PATH is only the legacy location and can point at a stale copy.
+    path = Path(index_path) if index_path else kb.default_index()
     results: list[dict] = []
     if path.exists():
         with sqlite3.connect(path) as db:
@@ -65,7 +67,7 @@ def cite(sections: list[str] | tuple[str, ...] = (), query: str | None = None,
 
 def missing_sections(sections: list[str], index_path: Path | str | None = None) -> list[str]:
     """返回索引里找不到的章节号（启动时检查 refs.yaml 用）。"""
-    path = Path(index_path) if index_path else config.INDEX_PATH
+    path = Path(index_path) if index_path else kb.default_index()
     if not path.exists():
         return list(sections)
     with sqlite3.connect(path) as db:

@@ -34,6 +34,18 @@ class FakeOperations:
     def save_skill(self, payload):
         return {"skill_id": "saved-test", "path": "/tmp/saved-test", "skill": {"id": "saved-test"}}
 
+    def list_memories(self):
+        return {"memories": [{"id": 7, "kind": "fact", "text": "MES=192.168.10.20"}],
+                "facts_count": 1, "episodes_count": 0}
+
+    def forget_memory(self, identifier):
+        return {"ok": True, "memory_id": int(identifier)}
+
+    def simulator_check(self, payload):
+        command = payload["command"]
+        return {"command": command, "allowed": ";" not in command,
+                "reason": "ok" if ";" not in command else "包含危险字符", "simulated": True}
+
 
 class HTTPContractTest(unittest.TestCase):
     @classmethod
@@ -92,6 +104,17 @@ class HTTPContractTest(unittest.TestCase):
         status, data, _ = self.request("/api/skills/save", {"run_id": "run-" + "1" * 32, "name": "saved"})
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(data)["skill_id"], "saved-test")
+
+    def test_memory_list_delete_and_backend_simulator_contracts(self):
+        status, data, _ = self.request("/api/memory")
+        self.assertEqual((status, json.loads(data)["facts_count"]), (200, 1))
+        request = urllib.request.Request(self.base + "/api/memory/7", method="DELETE")
+        with urllib.request.urlopen(request, timeout=3) as response:
+            self.assertEqual(json.loads(response.read())["memory_id"], 7)
+        status, data, _ = self.request("/api/simulator/check", {"command": "display version"})
+        self.assertTrue(json.loads(data)["allowed"])
+        status, data, _ = self.request("/api/simulator/check", {"command": "display version; reboot"})
+        self.assertFalse(json.loads(data)["allowed"])
 
     def test_model_errors_map_to_502_503_504_and_never_200(self):
         original = server_module.operations.ask

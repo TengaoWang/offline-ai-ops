@@ -105,7 +105,7 @@ def remember(facts: list[dict], skill_ids: set[str]) -> list[dict]:
     return saved
 
 
-def run(skill_id: str, variables: list[dict] | None = None):
+def run(skill_id: str, variables: list[dict] | None = None, execution_mode: str = "real"):
     """执行技能，逐个产出 engine 的事件 (事件名, 数据)。
 
     参数：先用长期记忆里记住的，再用调度器从这句话里取到的（这句话里说的优先）；只接受该技能定义过的变量，
@@ -117,7 +117,9 @@ def run(skill_id: str, variables: list[dict] | None = None):
         value = normalize_value(item.get("value") or "")
         if _VALUE.match(value):
             overrides[item["name"]] = value
-    yield from run_skill(skill_id, overrides=overrides)
+    if execution_mode not in {"real", "simulation"}:
+        raise ValueError("execution_mode 只允许 real 或 simulation")
+    yield from run_skill(skill_id, overrides=overrides, replay_only=execution_mode == "simulation")
 
 
 def citations(run_result: dict) -> tuple[list[dict], dict]:

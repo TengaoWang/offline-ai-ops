@@ -268,11 +268,14 @@ MacBook Air M4 16GB，qwen3:8b；有独立显卡的 Windows 电脑会快一些�
 | 一键体检 `simulation` 模式 | 全部命令读回放 | 不用 |
 | 事件和字段 | `start / collect / rules / ai / report / done`，字段和原来一样（`run_id`、`collected`、`rule_path`、`timing`、`display`、`duration_s` 等），另外多了 `mode`（live / replay）、`replay_source`、`finding_id` | 不用 |
 | 出处 | 技能里写章节号，由 `llm.cite()` 查出真实页码；没有依据的结论标「手册中未找到依据」，不隐藏 | 不用 |
-| 知识问答 `/api/ask` | 不变：`answer()` 默认不执行技能、不读写记忆 | 不用 |
+| 主对话 `/api/ask` | 传 `agent_mode: true`，支持记忆、排障建议和明确要求时执行技能 | 已接入 |
+| 独立知识问答 `/api/ask` | 传 `agent_mode: false`，保持纯 RAG，不执行技能、不读写记忆 | 已接入 |
+| 长期记忆 | `GET /api/memory` 展示，`DELETE /api/memory/{id}` 删除 | 已接入 |
+| 命令模拟器 | `POST /api/simulator/check` 调用后端白名单，仅返回固定样例、不执行命令 | 已接入 |
 
-### 可选：问答里也能排查 + 长期记忆
+### 已接入：问答里排查 + 长期记忆
 
-`answer()` 加了参数 `diagnose`（默认 `False`）。界面想要「在问答框里说『帮我查一下』就执行技能、记住现场信息」时：
+网页主对话已经通过服务层用下面的方式调用：
 
 ```python
 result = answer(question, history=..., locale=locale, diagnose=True)
@@ -282,6 +285,6 @@ result = answer(question, history=..., locale=locale, diagnose=True)
 - `diagnosed`：已执行技能，`run` 是完整的执行结果，可以直接用一键体检的渲染函数显示；
 - `remembered`：已记住现场信息。
 
-还会多出 `suggestion` 字段（「要我现场排查吗？回复「好」…」）。`history` 需要多存 `query`、`suggest_skill` 两个字段（第 5 节）。长期记忆存在本机 `kb/memory.db` 和 `kb/memory/*.md`，前端不用管。
+还会多出 `suggestion` 字段（「要我现场排查吗？回复『好』…」）。`history` 会保存 `query`、`suggest_skill` 两个字段（第 5 节）。长期记忆存在本机 `kb/memory.db` 和 `kb/memory/*.md`，也可在前端「长期记忆」页查看和删除。
 
 有问题找陈文韬。

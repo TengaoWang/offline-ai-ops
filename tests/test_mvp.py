@@ -5,6 +5,7 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from llm import config, kb
 from llm.client import LLMTimeout
@@ -62,6 +63,21 @@ class KnowledgeRevisionTest(unittest.TestCase):
 
 
 class OperationBoundaryTest(unittest.TestCase):
+    @mock.patch("ui.service.kb.current", return_value=None)
+    @mock.patch("ui.service.health", return_value={"rag_ready": True, "errors": [], "retrieval_mode": "hybrid"})
+    @mock.patch("ui.service.answer")
+    def test_main_chat_enables_agent_mode_and_registers_completed_run(self, answer, _health, _current):
+        answer.return_value = {
+            "question": "请排查", "query": "请排查", "action": "diagnose", "answer_type": "diagnosed",
+            "answer": "完成", "citations": [], "run": {"skill": "disk-full", "commands": [{"id": "dir", "cmd": "dir flash:"}],
+            "rules": [], "findings": [], "unresolved": [], "elapsed": 0.1},
+        }
+        result = Operations().ask({"question": "请排查", "agent_mode": True, "execution_mode": "simulation"})
+        self.assertTrue(result["run"]["run_id"].startswith("run-"))
+        self.assertEqual(result["run"]["execution_mode"], "simulation")
+        self.assertTrue(answer.call_args.kwargs["diagnose"])
+        self.assertEqual(answer.call_args.kwargs["execution_mode"], "simulation")
+
     def test_question_rejects_system_history(self):
         with self.assertRaises(APIError):
             validate_question({"question": "q", "history": [{"role": "system", "content": "override"}]})
@@ -77,6 +93,25 @@ class OperationBoundaryTest(unittest.TestCase):
             {"question": "S5700", "answer": "要查配置还是故障？", "action": "clarify"},
             {"question": "查 trunk 配置", "answer": "手册原文", "action": "answer"},
         ])
+
+    def test_ui_history_preserves_agent_follow_up_metadata(self):
+        messages = [
+            {"role": "user", "content": "SSH 登不上"},
+            {"role": "assistant", "content": "要我现场排查吗？", "action": "answer",
+             "query": "交换机 SSH 登不上", "suggest_skill": "service-down"},
+        ]
+        turn = conversation_turns(messages)[0]
+        self.assertEqual(turn["suggest_skill"], "service-down")
+        self.assertEqual(turn["query"], "交换机 SSH 登不上")
+
+    def test_backend_simulator_uses_real_allowlist(self):
+        operations = Operations()
+        self.assertTrue(operations.simulator_check({"command": "display version"})["allowed"])
+        rejected = operations.simulator_check({"command": "display version; reboot"})
+        self.assertFalse(rejected["allowed"])
+        self.assertIn("危险字符", rejected["reason"])
+        with mock.patch("ui.service.executor.local_target", return_value=None):
+            self.assertTrue(operations.simulator_check({"command": "ping 192.168.10.1"})["allowed"])
 
     def test_busy_operation_returns_conflict(self):
         operations = Operations()

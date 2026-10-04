@@ -18,8 +18,8 @@ SYSTEM_PROMPT = """你是离线机房运维助手的「技能路由」。根据�
 
 可选技能：
 - net-unreachable：网络不通、ping 不通、连不上某台服务器或设备、丢包、网关、网线、交换机端口、VLAN
-- disk-full：磁盘或分区空间不足、硬盘满了、C 盘或 /var 满、inode 耗尽、写不进文件
-- service-down：某个服务或进程起不来、挂了、崩溃、反复重启、端口没在监听、网站或系统打不开但网络是通的
+- disk-full：交换机 Flash/存储空间不足、升级空间不足、回收站或闲置系统软件占空间
+- service-down：交换机 SSH、STelnet 或 Telnet 登录失败、远程登录服务未开启、VTY 用户已满
 - log-audit：查看或分析日志、异常登录、可疑操作、安全审计、谁动过配置
 
 与机房运维无关的问题（打印机、办公软件、账号申请、生活问题等）输出 {"skill": null}。"""
@@ -39,6 +39,14 @@ _MOCK_KEYWORDS = [
     ("service-down", ["起不来", "服务异常", "服务挂", "进程", "502", "503", "nginx", "mysql", "failed"]),
 ]
 
+# High-confidence product vocabulary is routed deterministically. This avoids a
+# small local model mapping "SSH 登不上" to the generic "连不上" network skill.
+_DIRECT_KEYWORDS = [
+    ("service-down", ["ssh", "stelnet", "telnet", "vty", "远程登录", "登录交换机", "登不上交换机"]),
+    ("disk-full", ["flash", "存储空间", "升级空间", "回收站", "系统软件占用"]),
+    ("log-audit", ["日志审计", "异常登录", "可疑操作", "谁动过配置"]),
+]
+
 
 def route(text: str, model: str | None = None) -> dict:
     """返回 {"skill": 技能 ID 或 None, "latency_s": 耗时（秒）, "raw": 模型原始输出}。
@@ -46,8 +54,12 @@ def route(text: str, model: str | None = None) -> dict:
     skill 为 None 表示不属于任何技能包，应交给人工处理。
     """
     start = time.perf_counter()
-    if config.MOCK:
-        lowered = text.lower()
+    lowered = text.lower()
+    direct = next((s for s, words in _DIRECT_KEYWORDS if any(word in lowered for word in words)), None)
+    if direct:
+        skill = direct
+        raw = json.dumps({"skill": skill}, ensure_ascii=False)
+    elif config.MOCK:
         skill = next((s for s, words in _MOCK_KEYWORDS if any(w in lowered for w in words)), None)
         raw = json.dumps({"skill": skill})
     else:

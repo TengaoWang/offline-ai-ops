@@ -286,7 +286,7 @@ def extract(question: str, passage: dict) -> dict:
 
 
 def answer_stream(question: str, history: list[dict] | None = None, locale: str = "zh-CN",
-                  diagnose: bool = False):
+                  diagnose: bool = False, execution_mode: str = "real"):
     """按步骤产出结果，界面可以先显示原文，再显示模型整理的回答：
 
       {"event": "memory", "facts": [...], "episodes": [...]}   （仅 diagnose=True）长期记忆里和这句话相关的内容
@@ -298,8 +298,10 @@ def answer_stream(question: str, history: list[dict] | None = None, locale: str 
       {"event": "final", ...answer() 的返回值}
 
     history：之前几轮 answer() 的返回值（可以不传）。用户回答追问时，会和上一句合成完整的问题再去查。
-    diagnose：打开「对话里排查 + 长期记忆」（命令行 python -m llm answer 默认打开）；默认关闭，界面行为不变。
+    diagnose：打开「对话里排查 + 长期记忆」。命令行对话和网页主对话会打开；独立知识问答页关闭。
     """
+    if execution_mode not in {"real", "simulation"}:
+        raise ValueError("execution_mode 只允许 real 或 simulation")
     start = time.perf_counter()
     locale = "en" if locale == "en" else "zh-CN"
     not_found = "No supporting evidence was found in the manuals." if locale == "en" else rag.NOT_FOUND
@@ -337,10 +339,10 @@ def answer_stream(question: str, history: list[dict] | None = None, locale: str 
             return
         if routed["action"] == "diagnose":
             run = None
-            for name, data in tools.run(routed["skill"], routed["vars"]):
+            for name, data in tools.run(routed["skill"], routed["vars"], execution_mode=execution_mode):
                 yield {"event": "skill", "name": name, "data": data}
                 if name == "done":
-                    run = data
+                    run = data | {"execution_mode": execution_mode}
             cites, index = tools.citations(run)
             summary = tools.summarize(routed["query"], run, recalled["episodes"])
             episode = tools.save_episode(routed["query"], routed["skill"], run)
@@ -402,7 +404,8 @@ def answer_stream(question: str, history: list[dict] | None = None, locale: str 
                     extract=excerpt, unsupported_commands=generated["unsupported_commands"])
 
 
-def answer(question: str, history: list[dict] | None = None, locale: str = "zh-CN", diagnose: bool = False) -> dict:
+def answer(question: str, history: list[dict] | None = None, locale: str = "zh-CN", diagnose: bool = False,
+           execution_mode: str = "real") -> dict:
     """手册问答的新入口。history 是之前几轮 answer() 的返回值，用于多轮对话（可以不传）。返回：
 
     {"question": 用户原话, "query": 结合上下文后的完整问题,
@@ -417,12 +420,13 @@ def answer(question: str, history: list[dict] | None = None, locale: str = "zh-C
     answer_type 为 generated：模型整理的回答，已通过核对；extracted：模型的回答没通过核对，
     显示的是手册原文（界面应标明「以下为手册原文」）。
 
-    diagnose=True 时（命令行对话默认打开，界面默认关闭）还可能返回：
+    diagnose=True 时（命令行对话和网页主对话启用）还可能返回：
     action "diagnose" / answer_type "diagnosed"：已执行技能，answer 是总结 + 诊断报告，run 是技能执行结果；
     action "remember" / answer_type "remembered"：记住了用户说的现场信息；
     并多出 skill、run、remembered、suggest_skill、suggestion 字段。
     """
-    for event in answer_stream(question, history, locale=locale, diagnose=diagnose):
+    for event in answer_stream(question, history, locale=locale, diagnose=diagnose,
+                               execution_mode=execution_mode):
         if event["event"] == "final":
             return {k: v for k, v in event.items() if k != "event"}
     raise RuntimeError("answer_stream 没有产出 final")  # 不会发生

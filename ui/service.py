@@ -6,8 +6,10 @@ import uuid
 
 from llm import answer, health, route, config
 from llm import kb
+from llm import memory
 from llm.client import LLMTimeout
 from engine import EngineError, SkillEngine, SkillValidationError
+from engine import executor
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -61,12 +63,33 @@ class Operations:
     def ask(self, payload):
         question, history = validate_question(payload)
         locale = "en" if payload.get("locale") == "en" else "zh-CN"
+        agent_mode = payload.get("agent_mode", False)
+        execution_mode = payload.get("execution_mode", "real")
+        if not isinstance(agent_mode, bool):
+            raise APIError("agent_mode 必须是布尔值")
+        if execution_mode not in {"real", "simulation"}:
+            raise APIError("execution_mode 只允许 real 或 simulation")
         def work():
             status = health()
             if not config.MOCK and not status["rag_ready"]:
                 raise APIError("问答未就绪：请检查 Ollama、问答模型和有效索引。" + "；".join(status["errors"]), "not_ready", 503)
             snapshot = kb.current()
-            result = answer(question, history=conversation_turns(history), locale=locale)
+            result = answer(question, history=conversation_turns(history), locale=locale,
+                            diagnose=agent_mode, execution_mode=execution_mode)
+            if result.get("run"):
+                run_id = "run-" + uuid.uuid4().hex
+                completed = result["run"] | {
+                    "run_id": run_id,
+                    "execution_mode": execution_mode,
+                    "target": {"kind": "local", "display_name": "localhost"},
+                    "issue": question,
+                }
+                with self.runs_lock:
+                    self.runs[run_id] = {"run_id": run_id, "state": "succeeded", "events": [],
+                                         "result": completed, "error": None,
+                                         "condition": threading.Condition(self.runs_lock),
+                                         "execution_mode": execution_mode, "created_at": time.time()}
+                result["run"] = completed
             answer_type = result["answer_type"]
             found = answer_type in {"generated", "extracted"} and bool(result["citations"])
             warnings = []
@@ -78,7 +101,8 @@ class Operations:
                        "not_found": "no_evidence"}.get(answer_type)
             return result | {
                 "found": found,
-                "execution_mode": "mock" if config.MOCK else "real",
+                "execution_mode": result.get("run", {}).get("execution_mode") if result.get("run") else
+                                  ("mock" if config.MOCK else "real"),
                 "verification_status": "citation_and_command_checked" if answer_type == "generated" else
                                        "source_extract" if answer_type == "extracted" else "not_run",
                 "refusal_reason": refusal,
@@ -89,6 +113,42 @@ class Operations:
                 "conversation_id": payload.get("conversation_id"),
             }
         return self.run("问答处理中", work)
+
+    def list_memories(self):
+        memory.sync_from_files()
+        items = memory.list_memories()
+        return {"memories": items, "facts_count": sum(x["kind"] == "fact" for x in items),
+                "episodes_count": sum(x["kind"] == "episode" for x in items)}
+
+    def forget_memory(self, identifier):
+        try:
+            memory_id = int(identifier)
+        except (TypeError, ValueError) as exc:
+            raise APIError("无效的记忆 ID") from exc
+        if memory_id < 1 or not memory.forget(memory_id):
+            raise APIError("记忆不存在", "memory_unknown", 404)
+        return {"ok": True, "memory_id": memory_id}
+
+    def simulator_check(self, payload):
+        command = payload.get("command")
+        if not isinstance(command, str) or not 1 <= len(command.strip()) <= 500:
+            raise APIError("命令应为 1～500 字符")
+        command = " ".join(command.strip().split())
+        first = command.split(" ", 1)[0].lower()
+        # The simulator validates syntax only and never executes the command, so
+        # use the Windows-style local table as a portable fallback on Linux.
+        target = "switch" if first in {"display", "dir"} else (executor.local_target() or "local")
+        allowed, reason = executor.check(command, target)
+        samples = {
+            "display version": "Huawei Versatile Routing Platform Software\nVRP (R) software, Version 5.170 (S5700 V200R019C10)",
+            "display interface brief": "Interface                         PHY   Protocol  InUti OutUti\nGE0/0/8                           up    up        0.01% 0.02%\nGE0/0/9                           up    down      0.00% 0.00%",
+            "display vlan 10": "VID  Type  Ports\n10   common GE0/0/8(U) GE0/0/10(U)",
+            "ping 192.168.10.1": "PING 192.168.10.1\nReply from 192.168.10.1\nSuccess rate is 100 percent (1/1)",
+            "ping 192.168.10.20": "PING 192.168.10.20\nRequest timeout.\nSuccess rate is 0 percent (0/1)",
+        }
+        return {"command": command, "allowed": allowed, "reason": reason, "target": target,
+                "output": samples.get(command.lower()) if allowed else None,
+                "simulated": True}
 
     def route(self, payload):
         text = payload.get("text")
@@ -275,6 +335,9 @@ def validate_question(payload):
     for message in history:
         if not isinstance(message, dict) or message.get("role") not in {"user", "assistant"} or not isinstance(message.get("content"), str):
             raise APIError("历史消息仅允许 user/assistant 文本")
+        for optional in ("action", "query", "suggest_skill"):
+            if message.get(optional) is not None and (not isinstance(message[optional], str) or len(message[optional]) > 4000):
+                raise APIError("历史消息附加字段无效")
         total += len(message["content"])
     if total > 16000:
         raise APIError("历史消息超过16000字符")
@@ -291,8 +354,13 @@ def conversation_turns(messages):
         if message["role"] == "user":
             pending = message["content"]
         elif pending is not None:
-            turns.append({"question": pending, "answer": message["content"],
-                          "action": message.get("action", "answer")})
+            turn = {"question": pending, "answer": message["content"],
+                    "action": message.get("action", "answer")}
+            if isinstance(message.get("query"), str):
+                turn["query"] = message["query"][:4000]
+            if message.get("suggest_skill") in {"net-unreachable", "disk-full", "service-down", "log-audit"}:
+                turn["suggest_skill"] = message["suggest_skill"]
+            turns.append(turn)
             pending = None
     return turns[-2:]
 

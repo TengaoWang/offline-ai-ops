@@ -106,7 +106,7 @@ class DispatchGuardTest(unittest.TestCase):
 
 
     def test_answer_default_does_not_touch_skills_or_memory(self):
-        """界面（ui/service.py）调用 answer() 不传 diagnose：不查技能、不读写记忆，返回字段和原来一样。"""
+        """纯 RAG 调用不传 diagnose：不查技能、不读写记忆，返回字段和原来一样。"""
         reply = {"action": "greet", "clarify_question": "", "query": "你好"}
         with mock.patch.object(config, "MOCK", False), mock.patch.object(qa, "chat", return_value=json.dumps(reply)), \
                 mock.patch.object(diagnose, "available_skills", side_effect=AssertionError("不应查技能")), \

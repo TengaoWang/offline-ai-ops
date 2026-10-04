@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -166,6 +167,12 @@ class MockModeTest(unittest.TestCase):
         self.assertEqual(router.route("df -h 看到 /var 满了")["skill"], "disk-full")
         self.assertEqual(router.route("MES 服务器业务网不通，管理口能 ping 通")["skill"], "net-unreachable")
         self.assertIsNone(router.route("打印机卡纸了")["skill"])
+
+    def test_switch_ssh_routes_to_login_skill_without_model_ambiguity(self):
+        config.MOCK = False
+        with mock.patch.object(router, "chat") as chat:
+            self.assertEqual(router.route("交换机 SSH 一直登不上，请排查")["skill"], "service-down")
+            chat.assert_not_called()
 
     def test_ask_maps_citation_numbers_to_real_sources(self):
         result = rag.ask("接口不通")

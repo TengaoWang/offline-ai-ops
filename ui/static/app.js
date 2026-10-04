@@ -18,6 +18,7 @@ const state = {
   progressStep: 0,
   progressLabel: "等待开始",
   pendingUploads: [],
+  memories: [],
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -29,7 +30,7 @@ const LANGUAGE_STORAGE_KEY = "offline-ai-ops.language.v1";
 
 const EN_TRANSLATIONS = {
   "离线 AI 运维助手": "Offline AI Ops Assistant", "离线运维助手": "Offline Ops Assistant", "本地工作区": "Local workspace", "数据仅保存在此设备": "Data stays on this device",
-  "新建排障会话": "New troubleshooting chat", "诊断对话": "Diagnostics", "知识问答": "Knowledge Q&A", "手册与索引": "Manuals & index", "Evidence 对比": "Evidence comparison", "最近对话": "Recent chats", "演示场景": "Demo scenarios", "生产网中断": "Production network outage", "磁盘空间告警": "Disk space alert", "服务启动失败": "Service startup failure", "系统状态": "System status",
+  "新建排障会话": "New troubleshooting chat", "诊断对话": "Diagnostics", "知识问答": "Knowledge Q&A", "手册与索引": "Manuals & index", "长期记忆": "Long-term memory", "Evidence 对比": "Evidence comparison", "最近对话": "Recent chats", "演示场景": "Demo scenarios", "生产网中断": "Production network outage", "磁盘空间告警": "Disk space alert", "服务启动失败": "Service startup failure", "系统状态": "System status",
   "正在检查本机状态": "Checking local status", "仅连接 127.0.0.1": "Local connection only", "离线优先 · 不向外部发送数据": "Offline first · no data sent externally", "工作区": "Workspace", "本地运行": "Running locally", "刷新系统状态": "Refresh system status", "打开对话列表": "Open chat list", "对话列表": "Chat list", "本地 Agent 工作台": "Local Agent workspace", "新的排障会话": "New troubleshooting chat", "私有会话": "Private chat",
   "离线运维 Agent": "Offline Ops Agent", "本机知识库与技能库": "Local knowledge base and skills", "你好，我可以根据现场描述选择排查技能，逐条执行只读检查，并把判定路径和手册出处一起整理出来。": "Describe an issue and I can select a skill, run read-only checks, and show the decision path with manual references.", "所有诊断都在本机完成。写操作只会作为建议展示，不会自动执行。": "Diagnostics run locally. Write operations are shown as suggestions and are never executed automatically.", "试试这些现场问题": "Choose an example, edit it if needed, then start troubleshooting", "点击示例填入描述，可修改后开始排查": "Choose an example, edit it if needed, then start troubleshooting", "MES 业务网不通，管理口正常": "MES business network unreachable; management interface responds", "服务器磁盘空间告警": "Server disk space alert", "nginx 服务返回 502": "nginx returns HTTP 502",
   "排查技能": "Troubleshooting skill", "排查技能（可选）": "Skill (optional)", "自动匹配（不指定技能）": "Auto-match (no skill selected)", "自动匹配": "Auto-match", "不选技能时将自动匹配": "Leave the skill blank to auto-match", "描述现场故障，例如：MES 服务器业务网不通，管理口还能 ping 通": "Describe the issue, or leave the skill blank for automatic matching", "描述现场故障；不选技能时将自动匹配": "Describe the issue; leave the skill blank for automatic matching", "Enter 发送 · Shift + Enter 换行": "Enter to send · Shift + Enter for a new line", "一键体检": "Run selected skill", "开始排查": "Troubleshoot", "只读白名单命令自动采集 · 修复指令需由现场人员确认": "Read-only allowlisted checks · a person must approve repair commands", "一键体检运行已选技能；开始排查按描述匹配，也可手动指定技能。": "Run selected skill executes it directly; Troubleshoot routes the issue unless you choose a skill.",
@@ -514,8 +515,9 @@ function renderStatus(health) {
     ["当前操作", health.busy ? (health.operation || "处理中") : health.recovering ? "模型状态未知，需要重启服务" : "空闲"],
     ["技能包", (health.skills_count || state.skills.length) + " 个"],
     ["后端接口", "本机 REST + SSE /api/*"],
-    ["交换机测试模拟器", "本地固定样例，不连接真实设备"],
-    ["U 盘便携启动", "当前原型未包含免安装启动脚本与双方案打包"],
+    ["长期记忆", "已接入本机 SQLite 与 Markdown 记忆库"],
+    ["交换机测试模拟器", "后端白名单校验 + 本地固定样例，不连接真实设备"],
+    ["U 盘便携启动", "已提供构建与校验脚本；目标机验收状态以发布报告为准"],
     ["已导入手册", manualFiles],
     ["手册目录", health.docs_dir || "本地 kb/docs/"],
     ["索引文件", health.index_path || "本地 kb/index.db"],
@@ -628,7 +630,7 @@ function handleSkillListClick(event) {
 
 function setView(name) {
   state.activeView = name;
-  const labels = { chat: "诊断对话", qa: "知识问答", manuals: "手册与索引", evidence: "Evidence 对比", status: "系统状态" };
+  const labels = { chat: "诊断对话", qa: "知识问答", manuals: "手册与索引", memory: "长期记忆", evidence: "Evidence 对比", status: "系统状态" };
   $$(".page-view").forEach((view) => {
     const active = view.id === name + "View";
     view.hidden = !active;
@@ -786,9 +788,9 @@ function restoreConversationHtml(conversation) {
   host.innerHTML = conversation.html || state.welcomeHtml;
   host.querySelectorAll(".agent-run").forEach((run) => {
     const intro = run.querySelector(".run-intro");
-    if (intro?.textContent.includes("当前为本地演示流")) {
+    if (intro && (intro.textContent.includes("当前为本地演示流") || intro.textContent.includes("尚未连接真实诊断引擎"))) {
       run.dataset.demo = "true";
-      intro.textContent = "当前诊断接口返回固定演示流；采集、判定和报告尚未连接真实诊断引擎。";
+      intro.textContent = "这是浏览器保存的旧版演示记录；新发起的诊断已接入本机技能引擎。";
     }
   });
   host.querySelectorAll("[data-run-badge]").forEach((badge) => {
@@ -957,8 +959,8 @@ function fallbackConversationTitle(text, skillId) {
   const isMes = /mes/i.test(source);
   const titles = {
     "net-unreachable": english ? (isMes ? "MES network · service unreachable" : "Network connectivity issue") : (isMes ? "MES 业务网 · 连通异常" : "网络连通问题"),
-    "disk-full": english ? "Server disk space alert" : "服务器磁盘空间告警",
-    "service-down": english ? "Service startup failure" : "服务启动故障",
+    "disk-full": english ? "Switch storage alert" : "交换机存储空间告警",
+    "service-down": english ? "Switch login failure" : "交换机登录故障",
     "log-audit": english ? "Log audit · suspicious activity" : "日志审计 · 异常活动",
   };
   if (skillId && titles[skillId]) return titles[skillId];
@@ -1024,16 +1026,46 @@ function appendManualAnswer(result) {
   }).join("");
   const message = document.createElement("article");
   message.className = "message assistant-message manual-answer-message";
-  const titles = { generated: "手册整理回答", extracted: "手册原文摘录", clarify: "需要补充信息", intro: "离线助手", out_of_scope: "超出手册范围", not_found: "手册依据不足" };
-  const badges = { generated: "已通过出处与命令核对", extracted: "模型整理未通过 · 展示原文", clarify: "等待补充信息", intro: "本机回答", out_of_scope: "范围分流", not_found: "未找到依据" };
+  const titles = { generated: "手册整理回答", extracted: "手册原文摘录", clarify: "需要补充信息", intro: "离线助手", out_of_scope: "超出手册范围", not_found: "手册依据不足", remembered: "已写入长期记忆", diagnosed: "现场排障总结" };
+  const badges = { generated: "已通过出处与命令核对", extracted: "模型整理未通过 · 展示原文", clarify: "等待补充信息", intro: "本机回答", out_of_scope: "范围分流", not_found: "未找到依据", remembered: "仅保存在本机", diagnosed: "已执行白名单诊断" };
   const title = titles[result.answer_type] || (result.found ? "手册回答" : "手册依据不足");
   const badge = badges[result.answer_type] || (result.found ? "手册回答" : "未发布无依据结论");
   const warnings = (result.warnings || []).map((warning) => '<div class="demo-note">' + escapeHtml(warning) + '</div>').join("");
-  message.innerHTML = '<div class="message-avatar assistant-avatar" aria-hidden="true">AI</div><div class="message-body"><div class="message-meta"><strong>离线手册助手</strong><span>' + escapeHtml(badge) + '</span></div>' + warnings + '<div class="answer-box ' + (result.found || result.answer_type === "intro" || result.answer_type === "clarify" ? "" : "no-source") + '"><strong>' + escapeHtml(title) + '</strong><p class="manual-answer-text">' + escapeHtml(result.answer || "手册中未找到依据。") + '</p><div class="answer-meta">' + escapeHtml((result.retrieval_mode || "本地分流") + " · " + Number(result.latency_s || 0).toFixed(1) + " 秒") + '</div>' + (sourceButtons ? '<div class="source-list">' + sourceButtons + '</div>' : "") + "</div></div>";
+  const body = result.answer_type === "diagnosed" ? String(result.answer || "").split("\n\n诊断报告：", 1)[0] : (result.answer || "手册中未找到依据。");
+  const suggestion = result.suggestion ? '<div class="demo-note agent-suggestion">' + escapeHtml(result.suggestion) + '</div>' : "";
+  const positive = result.found || ["intro", "clarify", "remembered", "diagnosed"].includes(result.answer_type);
+  message.innerHTML = '<div class="message-avatar assistant-avatar" aria-hidden="true">AI</div><div class="message-body"><div class="message-meta"><strong>离线运维 Agent</strong><span>' + escapeHtml(badge) + '</span></div>' + warnings + '<div class="answer-box ' + (positive ? "" : "no-source") + '"><strong>' + escapeHtml(title) + '</strong><p class="manual-answer-text">' + escapeHtml(body) + '</p>' + suggestion + '<div class="answer-meta">' + escapeHtml((result.retrieval_mode || "本地分流") + " · " + Number(result.latency_s || 0).toFixed(1) + " 秒") + '</div>' + (sourceButtons ? '<div class="source-list">' + sourceButtons + '</div>' : "") + "</div></div>";
   $("#chatFeed").appendChild(message);
   renderSourceShelf();
   persistActiveConversation();
   scrollChatToBottom();
+}
+
+function renderCompletedRun(run, skillId) {
+  if (!run) return;
+  const runEl = appendRunShell(skillId || run.skill || "自动匹配技能");
+  runEl.dataset.runId = run.run_id || "";
+  updateRunSkill(runEl, run.skill || skillId);
+  (run.collected || run.commands || []).forEach(appendCommand);
+  renderRules(run.rule_path || run.rules || []);
+  if (run.ai_reasoning) {
+    const section = $("[data-ai-section]", runEl);
+    section.hidden = false;
+    $("[data-ai]", runEl).textContent = "AI 补充推理：" + run.ai_reasoning;
+  }
+  renderReport(run);
+  state.lastRun = run;
+  $("[data-run-complete]", runEl).hidden = false;
+  const simulated = run.execution_mode === "simulation";
+  const badge = $("[data-run-badge]", runEl);
+  badge.classList.toggle("demo", simulated);
+  badge.textContent = (simulated ? "模拟诊断完成" : "真实诊断完成") + " · " + Number(run.elapsed || 0).toFixed(1) + "s";
+  if (simulated) {
+    $(".run-intro", runEl).textContent = "当前运行经过真实技能引擎与规则树，但采集输出来自明确标识的 simulation 固件。";
+  }
+  updateEvidenceMetrics();
+  generateEvidence();
+  persistActiveConversation();
 }
 
 function setProgress(active, stateText) {
@@ -1056,12 +1088,21 @@ function setProgress(active, stateText) {
 function appendRunShell(skillId) {
   const message = document.createElement("article");
   message.className = "message assistant-message";
-  message.innerHTML = '<div class="message-avatar assistant-avatar" aria-hidden="true">AI</div><div class="message-body"><div class="message-meta"><strong>离线运维 Agent</strong><span>本机技能库 · ' + escapeHtml(skillName(skillId)) + '</span></div><div class="message-content"><p class="run-intro-text">已匹配 <strong>' + escapeHtml(skillName(skillId)) + '</strong>。现在开始逐条运行白名单只读检查，并整理规则判定与手册出处。</p><div class="agent-run"><div class="agent-run-head"><strong>诊断执行过程</strong><span class="run-badge" data-run-badge>正在连接本地诊断流</span></div><div class="run-intro">执行期间只采集状态，不会运行修复写操作。</div><section class="run-section"><div class="run-section-title">采集过程 <span data-command-count>等待命令回显</span></div><div class="command-list" data-command-list><div class="run-empty">正在等待第一条命令…</div></div></section><section class="run-section"><div class="run-section-title">规则树判定 <span>路径可展开核对</span></div><div class="inline-rules" data-rules><div class="run-empty">等待采集结果。</div></div></section><section class="run-section" data-ai-section hidden><div class="run-section-title">AI 补充推理 <span>与规则树结论区分展示</span></div><div class="ai-reasoning" data-ai></div></section><section class="run-section"><div class="run-section-title">诊断报告 <span data-report-count>等待报告</span></div><div class="findings-list" data-findings><div class="run-empty">等待报告生成。</div></div><div data-unresolved></div></section><div class="run-complete" data-run-complete hidden>✓ <span>诊断完成</span><button class="save-skill-inline" type="button" data-save-skill>存为技能</button></div></div></div></div>';
+  message.innerHTML = '<div class="message-avatar assistant-avatar" aria-hidden="true">AI</div><div class="message-body"><div class="message-meta"><strong>离线运维 Agent</strong><span data-run-skill-meta>本机技能库 · ' + escapeHtml(skillName(skillId)) + '</span></div><div class="message-content"><p class="run-intro-text">已匹配 <strong data-run-skill-name>' + escapeHtml(skillName(skillId)) + '</strong>。现在开始逐条运行白名单只读检查，并整理规则判定与手册出处。</p><div class="agent-run"><div class="agent-run-head"><strong>诊断执行过程</strong><span class="run-badge" data-run-badge>正在连接本地诊断流</span></div><div class="run-intro">执行期间只采集状态，不会运行修复写操作。</div><section class="run-section"><div class="run-section-title">采集过程 <span data-command-count>等待命令回显</span></div><div class="command-list" data-command-list><div class="run-empty">正在等待第一条命令…</div></div></section><section class="run-section"><div class="run-section-title">规则树判定 <span>路径可展开核对</span></div><div class="inline-rules" data-rules><div class="run-empty">等待采集结果。</div></div></section><section class="run-section" data-ai-section hidden><div class="run-section-title">AI 补充推理 <span>与规则树结论区分展示</span></div><div class="ai-reasoning" data-ai></div></section><section class="run-section"><div class="run-section-title">诊断报告 <span data-report-count>等待报告</span></div><div class="findings-list" data-findings><div class="run-empty">等待报告生成。</div></div><div data-unresolved></div></section><div class="run-complete" data-run-complete hidden>✓ <span>诊断完成</span><button class="save-skill-inline" type="button" data-save-skill>存为技能</button></div></div></div></div>';
   $("#chatFeed").appendChild(message);
   state.currentRunEl = message;
   persistActiveConversation();
   scrollChatToBottom();
   return message;
+}
+
+function updateRunSkill(runEl, skillId) {
+  if (!runEl || !skillId) return;
+  const name = skillName(skillId);
+  const meta = $("[data-run-skill-meta]", runEl);
+  const title = $("[data-run-skill-name]", runEl);
+  if (meta) meta.textContent = "本机技能库 · " + name;
+  if (title) title.textContent = name;
 }
 
 function statusText(status) {
@@ -1156,7 +1197,7 @@ async function sendMessage(event) {
   const diagnostic = $("#interactionMode").value === "diagnose";
   const shouldGenerateTitle = ["新的排障会话", "New troubleshooting chat"].includes(activeConversation()?.title || "");
   const conversation = activeConversation();
-  const history = Array.isArray(conversation?.messages) ? conversation.messages.filter((item) => item.status === "complete").map(({ role, content, action }) => ({ role, content, action })) : [];
+  const history = Array.isArray(conversation?.messages) ? conversation.messages.filter((item) => item.status === "complete").map(({ role, content, action, query, suggest_skill }) => ({ role, content, action, query, suggest_skill })) : [];
   appendUserMessage(text);
   if (conversation && !diagnostic) {
     if (!Array.isArray(conversation.messages)) conversation.messages = [];
@@ -1190,10 +1231,12 @@ async function sendMessage(event) {
     if (paragraph) paragraph.textContent = "正在检索、生成并逐条核验依据 · " + Math.floor((Date.now() - started) / 1000) + " 秒";
   }, 1000);
   try {
-    const result = await api("/api/ask", { method: "POST", body: JSON.stringify({ question: text, history, conversation_id: conversationId, request_id: requestId, locale: state.locale }) });
+    const result = await api("/api/ask", { method: "POST", body: JSON.stringify({ question: text, history, conversation_id: conversationId, request_id: requestId, locale: state.locale, agent_mode: true, execution_mode: $("#executionMode").value }) });
     waiting.remove();
     appendManualAnswer(result);
-    if (conversation) conversation.messages.push({ role: "assistant", content: result.answer || "手册中未找到依据。", status: "complete", requestId, citations: result.citations || [], found: Boolean(result.found), action: result.action, answerType: result.answer_type });
+    if (result.run) renderCompletedRun(result.run, result.skill);
+    if (result.remembered?.length || result.run) await loadMemories();
+    if (conversation) conversation.messages.push({ role: "assistant", content: result.answer || "手册中未找到依据。", status: "complete", requestId, citations: result.citations || [], found: Boolean(result.found), action: result.action, answerType: result.answer_type, query: result.query, suggest_skill: result.suggest_skill });
     if (shouldGenerateTitle) requestConversationTitle(text, null, conversationId);
     setProgress(4, "已完成");
   } catch (error) {
@@ -1234,6 +1277,7 @@ async function runDiagnostic(skillId, issue = "", executionMode = "real") {
   let serverErrorHandled = false;
   source.addEventListener("start", (event) => {
     const payload = JSON.parse(event.data);
+    updateRunSkill(runEl, payload.skill);
     runEl.dataset.demo = String(payload.execution_mode !== "real");
     const badge = $("[data-run-badge]", runEl);
     if (payload.execution_mode === "simulation") {
@@ -1369,7 +1413,7 @@ async function askManual(event) {
   $("#askBtn").disabled = true;
   $("#qaResult").innerHTML = '<div class="empty-card"><strong>正在检索本地手册</strong><p>只查询本机已建索引。</p></div>';
   try {
-    const result = await api("/api/ask", { method: "POST", body: JSON.stringify({ question, locale: state.locale }) });
+    const result = await api("/api/ask", { method: "POST", body: JSON.stringify({ question, locale: state.locale, agent_mode: false }) });
     const citations = result.citations || [];
     const demoNote = state.health && state.health.mock ? '<div class="demo-note">当前为 Mock 演示模式。下方答案与引用是固定样例，不代表已从真实手册核验；请切换到真实模式后再用于现场判断。</div>' : "";
     const answerTitle = result.found ? (state.health && state.health.mock ? "演示回答 · Mock" : "回答") : "手册中未找到依据";
@@ -1384,6 +1428,36 @@ async function askManual(event) {
 function renderSamples(samples) {
   $("#sampleCount").textContent = (samples || []).length + " 条";
   $("#sampleList").innerHTML = (samples || []).length ? samples.map((sample) => '<article class="sample-item"><strong>' + escapeHtml(sample.file) + (sample.section ? " · " + escapeHtml(sample.section) : "") + (sample.page ? " · P" + escapeHtml(sample.page) : "") + '</strong><p>' + escapeHtml(sample.text) + "</p></article>").join("") : '<div class="empty-card"><strong>暂无索引片段</strong><p>导入手册并重建索引后，会在这里展示抽样结果。</p></div>';
+}
+
+function renderMemories(payload) {
+  state.memories = payload.memories || [];
+  $("#memorySummary").textContent = "现场信息 " + Number(payload.facts_count || 0) + " 条 · 历史排障 " + Number(payload.episodes_count || 0) + " 条";
+  $("#memoryList").innerHTML = state.memories.length ? state.memories.map((item) => {
+    const kind = item.kind === "episode" ? "排障记录" : "现场信息";
+    const when = new Date(Number(item.updated || item.created) * 1000).toLocaleString();
+    return '<article class="memory-card" data-kind="' + escapeHtml(item.kind) + '"><div class="memory-card-copy"><div class="memory-card-head"><span class="memory-kind">' + kind + '</span><time>' + escapeHtml(when) + '</time>' + (item.skill ? '<span class="memory-card-skill">' + escapeHtml(skillName(item.skill)) + '</span>' : "") + '</div><p>' + escapeHtml(item.text) + '</p></div><button class="memory-delete" type="button" data-memory-delete="' + escapeHtml(item.id) + '">删除</button></article>';
+  }).join("") : '<div class="empty-card"><strong>尚无长期记忆</strong><p>在主对话中说“记一下……”可保存现场信息；完成对话式排障后会自动保存排障记录。</p></div>';
+}
+
+async function loadMemories() {
+  try {
+    renderMemories(await api("/api/memory"));
+  } catch (error) {
+    $("#memorySummary").textContent = "长期记忆暂不可用";
+    $("#memoryList").innerHTML = '<div class="empty-card"><strong>读取失败</strong><p>' + escapeHtml(error.message) + '</p></div>';
+  }
+}
+
+async function deleteMemory(memoryId) {
+  const item = state.memories.find((memory) => String(memory.id) === String(memoryId));
+  if (!item || !window.confirm("确定删除这条本机记忆吗？删除后无法恢复。")) return;
+  try {
+    await api("/api/memory/" + encodeURIComponent(memoryId), { method: "DELETE" });
+    await loadMemories();
+  } catch (error) {
+    $("#memorySummary").textContent = "删除失败：" + error.message;
+  }
 }
 
 async function loadSamples() {
@@ -1556,25 +1630,25 @@ function startSelectedSkillCheckup() {
   runDiagnostic(skill.id, "一键体检：" + displayedSkillName, $("#executionMode").value);
 }
 
-function simulateSwitchCommand(command) {
+async function simulateSwitchCommand(command) {
   const value = String(command || "").trim().replace(/\s+/g, " ");
   if (!value) return;
-  const allowed = {
-    "display version": "Huawei Versatile Routing Platform Software\nVRP (R) software, Version 5.170 (S5700 V200R019C10)\nCopyright (C) 2000-2020 HUAWEI TECH CO., LTD",
-    "display interface brief": "Interface                         PHY   Protocol  InUti OutUti\nGE0/0/8                           up    up        0.01% 0.02%\nGE0/0/9                           up    down      0.00% 0.00%",
-    "display vlan 10": "VID  Type  Ports\n10   common GE0/0/8(U) GE0/0/10(U)",
-    "ping 192.168.10.1": "PING 192.168.10.1: 56 data bytes\nReply from 192.168.10.1: bytes=56 time=1 ms TTL=64\nSuccess rate is 100 percent (1/1)",
-    "ping 192.168.10.20": "PING 192.168.10.20: 56 data bytes\nRequest timeout.\nSuccess rate is 0 percent (0/1)",
-  };
-  const risky = /[;&|`]/.test(value) || /\b(rm|reboot|shutdown)\b/i.test(value) || /\bwrite\s+memory\b/i.test(value);
   const output = $("#simulatorOutput");
-  if (risky || !Object.hasOwn(allowed, value.toLowerCase())) {
-    output.className = "simulator-output rejected";
-    output.innerHTML = '<strong>该命令不在白名单，已拒绝</strong><p>模拟器未执行任何命令。</p><pre>$ ' + escapeHtml(value) + "</pre>";
-    return;
-  }
   output.className = "simulator-output";
-  output.innerHTML = '<strong>模拟成功 · 固定样例输出</strong><pre>$ ' + escapeHtml(value) + "\n" + escapeHtml(allowed[value.toLowerCase()]) + "</pre>";
+  output.innerHTML = '<strong>正在调用后端白名单校验…</strong><pre>$ ' + escapeHtml(value) + "</pre>";
+  try {
+    const result = await api("/api/simulator/check", { method: "POST", body: JSON.stringify({ command: value }) });
+    if (!result.allowed) {
+      output.className = "simulator-output rejected";
+      output.innerHTML = '<strong>后端白名单已拒绝</strong><p>' + escapeHtml(result.reason || "命令不允许") + '</p><pre>$ ' + escapeHtml(value) + "</pre>";
+      return;
+    }
+    output.className = "simulator-output";
+    output.innerHTML = '<strong>后端白名单校验通过 · 固定样例输出</strong>' + (result.output ? '<pre>$ ' + escapeHtml(result.command) + "\n" + escapeHtml(result.output) + "</pre>" : '<p>命令已通过后端白名单，但当前没有对应的模拟输出；没有执行真实命令。</p>');
+  } catch (error) {
+    output.className = "simulator-output rejected";
+    output.innerHTML = '<strong>后端校验失败</strong><p>' + escapeHtml(error.message) + '</p>';
+  }
 }
 
 function bindEvents() {
@@ -1629,6 +1703,10 @@ function bindEvents() {
   $("#selectManualBtn").addEventListener("click", () => $("#manualFile").click());
   $("#manualFile").addEventListener("change", (event) => uploadManual(event.target.files[0]));
   $("#rebuildIndexBtn").addEventListener("click", rebuildIndex);
+  $("#memoryList").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-memory-delete]");
+    if (button) deleteMemory(button.dataset.memoryDelete);
+  });
   const dropZone = $("#dropZone");
   dropZone.addEventListener("dragover", (event) => { event.preventDefault(); dropZone.classList.add("dragging"); });
   dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragging"));
@@ -1670,6 +1748,12 @@ function bindEvents() {
 }
 
 async function init() {
+  if (window.location.protocol === "file:") {
+    const notice = $("#directOpenNotice");
+    if (notice) notice.hidden = false;
+    $(".app-shell")?.setAttribute("inert", "");
+    return;
+  }
   try { state.locale = localStorage.getItem(LANGUAGE_STORAGE_KEY) === "en" ? "en" : "zh-CN"; } catch (error) { state.locale = "zh-CN"; }
   bindEvents();
   loadConversations();
@@ -1680,7 +1764,7 @@ async function init() {
   localizePage();
   const localizationObserver = new MutationObserver(() => localizePage());
   localizationObserver.observe(document.body, { childList: true, characterData: true, subtree: true });
-  await Promise.all([loadHealth(), loadSkills(), loadSamples()]);
+  await Promise.all([loadHealth(), loadSkills(), loadSamples(), loadMemories()]);
 }
 
 document.addEventListener("DOMContentLoaded", init);
