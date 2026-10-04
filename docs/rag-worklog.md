@@ -54,6 +54,17 @@
 | 46 | 2026-10-03 | `rag-plan.md` 写入新流程（⑨ 调度器、⑩ 原文截取、⑪ 审核）、接口、评测和数据 | `docs/rag-plan.md` | 35 项单元测试通过 | `9d4b37b` |
 | 47 | 2026-10-03 | 检查界面接口：对比 `main` 和 `dev-rag-v2`，`ui/`、`route`、`chat`、`config`、`health` 零改动，`ask()` 只新增可选参数 `prompt`；启动界面服务实测 `--check`、`/api/health`、`/api/route`、`/api/ask` 都正常，`/api/ask` 返回字段和 `main` 完全一样 | — | 发现 `answer()` 在模型出错时会丢掉已截取的原文 | — |
 | 48 | 2026-10-03 | 修复：`answer()` 里模型调用出错（`LLMError`）时退回显示已截取的原文 | `llm/qa.py`、`tests/test_llm.py` | 36 项单元测试通过 | `08398e5` |
+| 49 | 2026-10-03 | 写技能引擎技术方案（FR-2 ~ FR-9）：技能改成交换机方向（方案 A，ID 不变），执行器 / 规则树 / `cite()` 由陈文韬负责 | `docs/skills-engine-plan.md` | 演示平台 Windows；交换机侧没有设备，用手册示例做回放 | `9fd2745` |
+| 50 | 2026-10-03 | 白名单执行器（FR-9）：危险字符 → 拆参数 → 白名单（`whitelist.yaml`）→ 不经过 shell 执行；超时；GBK 解码；交换机命令读回放 | `engine/executor.py`、`engine/whitelist.yaml` | `ping 1.1.1.1; rm -rf /` 等 9 种注入、越界参数、交换机写命令全部拒绝 | `9fd2745` |
+| 51 | 2026-10-03 | `cite()`（FR-7）：章节号按完整一级匹配（8.2 不会配到 8.20），取该节第一段的页码；找不到按 query 检索；都找不到返回空 | `llm/cite.py` | 所有技能 `refs.yaml` 的章节号都能在手册里找到（单元测试） | `9fd2745` |
+| 52 | 2026-10-03 | 规则树（FR-4）、AI 补充判定（FR-5）、分级报告（FR-6）、执行流程（FR-3，单条 10 秒、总 30 秒） | `engine/rules.py`、`judge.py`、`runner.py`、`loader.py` | 事件和字段与界面 `DEMO_RUNS` 一致；分支键名用 hit / miss（YAML 会把 yes / no 读成布尔值） | `9fd2745` |
+| 53 | 2026-10-03 | 4 个技能改成交换机方向：网络连通、Flash 存储空间、SSH 登录、日志审计；交换机回放取自手册示例，每份注明页码和改动；删除含编造出处的旧 saved-skill | `skills/` | 每个技能至少 3 条分级结论；日志审计的 MSTP TC 日志由 AI 判断，引用 21.8.1.3 | `9fd2745` |
+| 54 | 2026-10-03 | 存为技能（FR-8）：从真实执行结果生成技能目录，AI 结论转成「待人工确认」的规则 | `engine/skillgen.py` | 保存后的技能能直接执行，结论一致 | `9fd2745` |
+| 55 | 2026-10-04 | 本机命令同时支持 macOS（`ping -c`、`ifconfig`、`netstat -rn`），按系统自动选写法 | `engine/`、`skills/*/collect.yaml` | 在 Mac 上真实执行通过；Windows 尚未真机验证 | `9fd2745` |
+| 56 | 2026-10-04 | 长期记忆：SQLite（bge-m3 向量检索）+ 每条一个 Markdown 文件（可改可删，启动时同步）；`python -m llm memory` | `llm/memory.py` | 不进 git | `9fd2745` |
+| 57 | 2026-10-04 | `answer()` 对话里接入技能：调度器加 diagnose / remember；只有明确要求动手查才执行，只描述现象时回答后提示「要我现场排查吗」；参数只接受用户的话或记忆里出现过的值 | `llm/diagnose.py`、`llm/qa.py`、`llm/__main__.py` | 调度器评测：带技能 48/51，不带 50/51（新增回归：「华为交换机」「帮我看看交换机」应追问） | `9fd2745` |
+| 58 | 2026-10-04 | 曾在 `ui/server.py` 接引擎和 `/api/answer`，按陈文韬要求全部撤回，`ui/` 保持原样；接法写进前端说明第 11 节 | `docs/frontend-answer.md` | `ui/` 无改动 | `9fd2745` |
+| 59 | 2026-10-04 | 命令行输出统一 UTF-8（Windows 终端 GBK 下 🔴 等符号会报错） | `llm/__main__.py`、`engine/__main__.py` | 测试 62 项通过 | `9fd2745` |
 
 ## 评测结果
 
