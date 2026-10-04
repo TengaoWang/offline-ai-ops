@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 import shutil
+import subprocess
 from pathlib import Path
 
 
@@ -24,6 +25,18 @@ def copy_tree(source: Path, target: Path):
 def require(path: Path, description: str):
     if not path.exists():
         raise SystemExit(f"缺少{description}：{path}")
+
+
+def git_commit() -> str | None:
+    """当前源码仓库的 commit，供构建产物追溯版本。"""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", "HEAD"],
+            capture_output=True, text=True, check=True,
+        )
+        return result.stdout.strip() or None
+    except (OSError, subprocess.CalledProcessError):
+        return None
 
 
 def main():
@@ -75,7 +88,7 @@ def main():
         files.append({"path": path.relative_to(args.output).as_posix(), "size": path.stat().st_size,
                       "sha256": sha256(path)})
     manifest = {"format": 1, "platform": args.platform, "backend": args.backend,
-                "network_downloads": False, "files": files}
+                "network_downloads": False, "git_commit": git_commit(), "files": files}
     (args.output / "SHA256SUMS.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps({"output": str(args.output), "files": len(files), "backend": args.backend}, ensure_ascii=False))
 

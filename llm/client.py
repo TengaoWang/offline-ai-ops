@@ -62,7 +62,16 @@ def chat(messages: list[dict], schema: dict | None = None, think: bool = False,
         response = _post_url(config.OLLAMA_HOST, "/api/chat", body)
         getter = lambda value: value["message"]["content"]
     else:
-        body = {"model": selected, "messages": messages, "stream": False,
+        msgs = messages
+        if not think:
+            # qwen3 默认走 thinking，输出进 reasoning_content，正式答案 content 为空。
+            # 与 Ollama 分支的 think=False 保持一致：显式加 /no_think 禁用思考。
+            msgs = [dict(m) for m in messages]
+            for m in reversed(msgs):
+                if m["role"] == "user":
+                    m["content"] = f"{m['content']}\n/no_think"
+                    break
+        body = {"model": selected, "messages": msgs, "stream": False,
                 "temperature": temperature, "max_tokens": num_predict or config.NUM_PREDICT}
         if schema is not None:
             body["response_format"] = {"type": "json_schema", "json_schema": {

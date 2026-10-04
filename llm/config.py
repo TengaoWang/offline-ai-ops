@@ -4,6 +4,10 @@ import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+# 便携打包时源码位于 <root>/app/ 下，而 kb/models/backends 等在 <root>/ 下，
+# 需要把根目录从 app/ 抬升一级，否则 kb 等默认路径会算错。
+if ROOT.name == "app" and (ROOT.parent / "kb").is_dir():
+    ROOT = ROOT.parent
 
 # Ollama 地址与模型
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST_URL", "http://127.0.0.1:11434")

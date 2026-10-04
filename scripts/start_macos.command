@@ -25,7 +25,7 @@ else
   "$PYTHON" "$PORTABLE_ROOT/app/scripts/check_ports.py" 8765 8080 8081
   export LLAMA_CPP_CHAT_HOST="http://127.0.0.1:8080"
   export LLAMA_CPP_EMBED_HOST="http://127.0.0.1:8081"
-  "$PORTABLE_ROOT/backends/llama.cpp/llama-server" -m "$PORTABLE_ROOT/models/chat.gguf" --alias qwen3:4b --host 127.0.0.1 --port 8080 >>"$PORTABLE_ROOT/logs/llama-chat.log" 2>&1 &
+  "$PORTABLE_ROOT/backends/llama.cpp/llama-server" -m "$PORTABLE_ROOT/models/chat.gguf" --alias qwen3:8b --host 127.0.0.1 --port 8080 >>"$PORTABLE_ROOT/logs/llama-chat.log" 2>&1 &
   PIDS+=("$!")
   "$PORTABLE_ROOT/backends/llama.cpp/llama-server" -m "$PORTABLE_ROOT/models/embed.gguf" --alias bge-m3 --embedding --host 127.0.0.1 --port 8081 >>"$PORTABLE_ROOT/logs/llama-embed.log" 2>&1 &
   PIDS+=("$!")

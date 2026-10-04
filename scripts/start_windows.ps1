@@ -23,7 +23,7 @@ try {
     $env:LLAMA_CPP_CHAT_HOST = "http://127.0.0.1:8080"
     $env:LLAMA_CPP_EMBED_HOST = "http://127.0.0.1:8081"
     $Server = Join-Path $PortableRoot "backends\llama.cpp\llama-server.exe"
-    $Processes += Start-Process -FilePath $Server -ArgumentList @("-m", (Join-Path $PortableRoot "models\chat.gguf"), "--alias", "qwen3:4b", "--host", "127.0.0.1", "--port", "8080") -RedirectStandardOutput (Join-Path $PortableRoot "logs\llama-chat.log") -RedirectStandardError (Join-Path $PortableRoot "logs\llama-chat-error.log") -PassThru -WindowStyle Hidden
+    $Processes += Start-Process -FilePath $Server -ArgumentList @("-m", (Join-Path $PortableRoot "models\chat.gguf"), "--alias", "qwen3:8b", "--host", "127.0.0.1", "--port", "8080") -RedirectStandardOutput (Join-Path $PortableRoot "logs\llama-chat.log") -RedirectStandardError (Join-Path $PortableRoot "logs\llama-chat-error.log") -PassThru -WindowStyle Hidden
     $Processes += Start-Process -FilePath $Server -ArgumentList @("-m", (Join-Path $PortableRoot "models\embed.gguf"), "--alias", "bge-m3", "--embedding", "--host", "127.0.0.1", "--port", "8081") -RedirectStandardOutput (Join-Path $PortableRoot "logs\llama-embed.log") -RedirectStandardError (Join-Path $PortableRoot "logs\llama-embed-error.log") -PassThru -WindowStyle Hidden
   }
   $Processes += Start-Process -FilePath $Python -ArgumentList @("-m", "ui.server", "--host", "127.0.0.1", "--port", "8765") -WorkingDirectory (Join-Path $PortableRoot "app") -RedirectStandardOutput (Join-Path $PortableRoot "logs\ui.log") -RedirectStandardError (Join-Path $PortableRoot "logs\ui-error.log") -PassThru -WindowStyle Hidden

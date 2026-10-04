@@ -26,3 +26,7 @@ runtime/
 # 长期记忆（本机数据，不进 git）
 kb/memory.db
 kb/memory/
+
+# 便携构建临时目录与 IDE 配置
+.tmp-portable/
+.idea/

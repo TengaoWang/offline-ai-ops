@@ -181,10 +181,11 @@ def validate_index(index, files, require_vectors=True):
 
 def publish(directory, manifest, base, root=None):
     root = Path(root or config.KB_ROOT)
-    for path in directory.rglob("*"):
-        if path.is_file():
-            with path.open("rb") as f:
-                os.fsync(f.fileno())
+    if os.name != "nt":
+        for path in directory.rglob("*"):
+            if path.is_file():
+                with path.open("rb") as f:
+                    os.fsync(f.fileno())
     manifest["complete"] = True
     write_json(directory / "manifest.json", manifest)
     sync_dir(directory / "docs")
