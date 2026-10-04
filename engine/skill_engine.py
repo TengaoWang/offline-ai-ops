@@ -1,7 +1,7 @@
 """界面使用的 SkillEngine 接口（ui/service.py、eval/eval_p0_diagnostics.py 调用）。
 
-接口和需求文档 §6.1 的契约一致：list_skills() / run(skill_id, target, mode, ...) / save_skill(run, name)。
-内部用本目录的引擎执行：loader.py（技能库）→ runner.py（白名单执行、规则树、AI 补充、手册出处）→ skillgen.py（存为技能）。
+公开接口为 list_skills() / run(skill_id, target, mode, ...) / save_skill(run, name)。
+内置技能从源码 skills/ 读取；现场生成的技能写入本地数据目录，不进入源码仓库。
 
 和 runner.run_skill() 的区别只是字段名：这里额外给出界面要的 run_id、execution_mode、collected、
 rule_path、timing、display、duration_s 等字段，原有字段保留。
@@ -57,10 +57,10 @@ class SkillLoader:
         return _list_skills(self.skills_root)
 
 
-def _card(skill: dict) -> dict:
+def _card(skill: dict, source: str = "skills/") -> dict:
     commands = skill["collect"].get("commands") or [] if skill["valid"] else []
     return {"id": skill["id"], "name": skill["name"], "description": skill["description"] or "本地只读排障技能",
-            "command_count": len(commands), "source": "skills/", "valid": skill["valid"],
+            "command_count": len(commands), "source": source, "valid": skill["valid"],
             "errors": skill["errors"], "demo_ready": skill["valid"],
             "targets": skill["collect"].get("targets", ["local"]) if skill["valid"] else []}
 
@@ -78,10 +78,27 @@ class SkillEngine:
     def __init__(self, skills_root: Path | str, runtime_root: Path | str | None = None,
                  project_root: Path | str | None = None, retriever=None, chat_fn=None):
         self.skills_root = Path(skills_root)
+        data_root = Path(runtime_root) if runtime_root else self.skills_root.parent / "data"
+        self.local_skills_root = data_root / "skills"
         self.loader = SkillLoader(self.skills_root, project_root)
+        self.local_loader = SkillLoader(self.local_skills_root, project_root)
+
+    def _loader_for(self, skill_id: str) -> SkillLoader:
+        if isinstance(skill_id, str) and SAFE_ID.fullmatch(skill_id):
+            built_in = self.skills_root / skill_id / "collect.yaml"
+            if built_in.is_file():
+                return self.loader
+            local = self.local_skills_root / skill_id / "collect.yaml"
+            if local.is_file():
+                return self.local_loader
+        return self.loader
 
     def list_skills(self) -> list[dict]:
-        return [_card(skill) for skill in self.loader.scan()]
+        cards = {skill["id"]: _card(skill) for skill in self.loader.scan()}
+        for skill in self.local_loader.scan():
+            if skill["id"] not in cards:
+                cards[skill["id"]] = _card(skill, "data/skills/")
+        return [cards[skill_id] for skill_id in sorted(cards)]
 
     def run(self, skill_id: str, target: dict | None = None, mode: str = "real", issue: str = "",
             emit: Callable[[str, dict], None] | None = None, enable_ai: bool = True,
@@ -91,7 +108,7 @@ class SkillEngine:
             raise EngineError("执行模式只允许 real 或 simulation", "invalid_mode")
         target = target or {"kind": "local", "display_name": "localhost"}
         try:
-            package = self.loader.load(skill_id)
+            package = self._loader_for(skill_id).load(skill_id)
         except SkillValidationError as exc:
             raise EngineError("；".join(exc.errors), "invalid_skill") from exc
         if not isinstance(target, dict) or target.get("kind") not in {"local", "simulator"}:
@@ -118,7 +135,7 @@ class SkillEngine:
         started = time.perf_counter()
         collected_at = analysed_at = None
         result: dict = {}
-        for event, data in run_skill(skill_id, skills_dir=self.skills_root, use_ai=enable_ai,
+        for event, data in run_skill(skill_id, skills_dir=package["dir"].parent, use_ai=enable_ai,
                                      overrides=overrides,
                                      replay_only=mode == "simulation" and target["kind"] == "local",
                                      simulator_client=simulator_client):
@@ -158,13 +175,15 @@ class SkillEngine:
         candidate = (slug or re.sub(r"[^a-z0-9_-]+", "-", title.lower())).strip("-")
         if not SAFE_ID.fullmatch(candidate):
             candidate = "saved-" + uuid.uuid4().hex[:12]
-        if (self.skills_root / candidate).exists():
+        if (self.skills_root / candidate).exists() or (self.local_skills_root / candidate).exists():
             raise EngineError("同名技能已存在，未覆盖", "skill_exists", 409)
         try:
-            created = skillgen.build(title, run, self.skills_root, slug=candidate)
+            source = self._loader_for(str(run.get("skill", ""))).load(str(run.get("skill", "")))
+            created = skillgen.build(title, run, self.local_skills_root, slug=candidate,
+                                     source_skills_dir=source["dir"].parent)
         except ValueError as exc:
             raise EngineError(str(exc), "invalid_run") from exc
         if created["errors"]:
             raise EngineError("生成的技能未通过校验：" + "；".join(created["errors"]), "invalid_skill")
         return {"skill_id": created["skill_id"], "path": created["path"],
-                "skill": _card(load_skill(Path(created["path"])))}
+                "skill": _card(load_skill(Path(created["path"])), "data/skills/")}

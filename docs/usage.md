@@ -82,7 +82,7 @@ open kb/memory                              # 打开记忆文件夹（Windows：
 .venv/bin/python -m ui.server          # 打开 http://127.0.0.1:8765
 ```
 
-界面的「一键体检」执行的就是下面这 4 个技能：「真实」模式下本机命令真实执行、交换机命令读回放；「模拟」模式全部读回放。启动脚本和便携包见 README 的启动说明（Haward 编写）。
+界面的「一键体检」执行内置技能：「真实」模式下本机命令真实执行、交换机命令读回放；「模拟」模式全部读回放。启动脚本和便携包见 README 的启动说明。
 
 ## 5. 直接执行技能（不经过对话）
 
@@ -153,5 +153,5 @@ $env:ENGINE_MODE="replay"          # Windows PowerShell
 |---|---|
 | [`llm/README.md`](../llm/README.md) | 模型与知识库接口（`answer`、`ask`、`retrieve`、`cite`、记忆） |
 | [`engine/README.md`](../engine/README.md) | 技能引擎、技能包格式、怎么新增技能 |
-| [`frontend-answer.md`](frontend-answer.md) | 给前端同学：接口说明，以及和界面合并后的情况（第 11 节） |
-| [`skills-engine-plan.md`](skills-engine-plan.md) | 技能引擎技术方案 |
+| [`rag-plan.md`](rag-plan.md) | RAG 技术路线、评测方法和已知限制 |
+| [`skill-authoring.md`](skill-authoring.md) | 技能包格式和安全边界 |

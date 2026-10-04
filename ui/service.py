@@ -32,7 +32,7 @@ class Operations:
         self.jobs_lock = threading.Lock()
         self.runs = {}
         self.runs_lock = threading.Lock()
-        self.engine = SkillEngine(ROOT / "skills", ROOT / "runtime", ROOT)
+        self.engine = SkillEngine(ROOT / "skills", config.DATA_DIR, ROOT)
 
     def begin(self, name):
         if self.recovering:

@@ -14,7 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from engine import executor, rules, runner, skillgen  # noqa: E402
+from engine import SkillEngine, executor, rules, runner, skillgen  # noqa: E402
 from engine.loader import SKILLS_DIR, all_ref_sections, list_skills, load_skill  # noqa: E402
 from llm import config  # noqa: E402
 from llm.cite import cite, missing_sections  # noqa: E402
@@ -202,6 +202,21 @@ class SkillsTest(unittest.TestCase):
         self.assertEqual(result["errors"], [])
         again = runner.run_skill_sync(result["skill_id"], skills_dir=self.skills, use_ai=False)
         self.assertEqual(again["findings"][0]["title"], run["findings"][0]["title"])
+
+    def test_skill_engine_saves_generated_skills_outside_source_tree(self):
+        """现场生成的数据写入本地数据目录，同时仍可列出并再次执行。"""
+        run = json.loads(json.dumps(runner.run_skill_sync("net-unreachable", skills_dir=self.skills,
+                                                          use_ai=False)))
+        data_root = Path(self.tmp.name) / "data"
+        engine = SkillEngine(self.skills, data_root, Path(self.tmp.name))
+        result = engine.save_skill(run, "Field VLAN", slug="field-vlan-local")
+        saved = data_root / "skills" / "field-vlan-local"
+        self.assertEqual(Path(result["path"]), saved)
+        self.assertTrue((saved / "collect.yaml").is_file())
+        cards = {card["id"]: card for card in engine.list_skills()}
+        self.assertEqual(cards["field-vlan-local"]["source"], "data/skills/")
+        rerun = engine.run("field-vlan-local", mode="simulation", enable_ai=False)
+        self.assertEqual(rerun["skill"], "field-vlan-local")
 
 
 @unittest.skipUnless(config.INDEX_PATH.exists(), "需要手册索引 kb/index.db")

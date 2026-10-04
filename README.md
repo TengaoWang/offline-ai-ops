@@ -7,7 +7,6 @@ GGboys · HacKU 2026 · Deep Technology Problem Statement 4（The Capability Tha
 还能在手册里检索依据、带出处回答问题，并记住现场信息和以前的排查经历。模型与知识库全部在本机运行。
 
 **怎么用：看 [`docs/usage.md`](docs/usage.md)（使用说明，含演示前检查）。**
-**工作报告：[`docs/report.md`](docs/report.md)（完成情况、架构、测试结果、已知问题）。**
 
 ## 目录
 
@@ -16,10 +15,10 @@ GGboys · HacKU 2026 · Deep Technology Problem Statement 4（The Capability Tha
 | [`engine/`](engine/) | 白名单只读执行（本机真实执行 + 交换机命令按手册示例回放）、规则树、AI 补充、带手册页码的分级报告、存为技能；`skill_engine.py` 提供界面使用的 `SkillEngine` 接口 | 可用 |
 | [`llm/`](llm/) | 模型、问答、混合检索、不可变知识库快照和 Ollama/llama.cpp 适配；`cite()` 手册出处；命令行对话里现场排查和长期记忆 | 可用 |
 | [`ui/`](ui/) | 本地 Web UI、问答 REST、诊断运行与 SSE、技能沉淀 | 可用 |
-| [`skills/`](skills/) | 4 个交换机技能：网络连通、Flash 存储空间、SSH 登录、日志审计（回放数据取自手册示例） | 可用 |
+| [`skills/`](skills/) | 内置交换机诊断与模拟器技能；回放数据仅用于离线演示和可重复验证 | 可用 |
 | [`eval/`](eval/) | 技能路由、检索和 P0 问答质量门禁 | 可用 |
 | [`tests/`](tests/) | LLM、引擎、安全、HTTP/SSE、双后端与便携包测试 | 可用 |
-| [`docs/`](docs/) | 需求文档、前端方案、RAG 技术路线与交接说明 | — |
+| [`docs/`](docs/) | 使用、运维、技能编写、RAG 技术路线与模拟器接入说明 | — |
 | [`packaging/`](packaging/) | 无下载便携包构建和四平台/后端实机验收说明 | 待目标机验收 |
 | `kb/docs/` | 厂商手册放这里（不进 git） | — |
 | `kb/index.db` | 手册索引（不进 git，可以直接拷给队友） | — |
@@ -121,7 +120,7 @@ Offline 助手采用本地 Web 操作台形式运行，静态资源由 Python �
 
 执行故障诊断时，需要明确选择“本机只读执行”或“模拟器固定输出”。真实执行失败时，系统不会自动切换到模拟模式。技能包中的修复命令仅作为建议展示，不会由系统自动执行。
 
-诊断完成后，可通过“存为技能”功能将本次流程保存到本机 `skills/` 目录。后端仅接受当前服务生成且已经完成的诊断运行，并会在写入前重新校验命令、规则和出处。
+诊断完成后，可通过“存为技能”功能将本次流程保存到本机 `data/skills/` 目录。该目录不会进入 Git；后端仅接受当前服务生成且已经完成的诊断运行，并会在写入前重新校验命令、规则和出处。
 
 技能包格式参见 [`docs/skill-authoring.md`](docs/skill-authoring.md)；启动参数、目标限制与错误恢复说明参见 [`docs/operations-runbook.md`](docs/operations-runbook.md)。
 
@@ -223,4 +222,4 @@ python scripts/verify_portable.py /path/to/assembled-package
 - 8GB CPU-only 目标机的质量和 30 秒最大耗时复验；若换用 4B/量化模型，必须重跑 `eval/eval_p0_quality.py`。
 - FR-1 的物理断网/关 Wi-Fi、出站连接记录，以及 FR-7 的至少 5 条人工逐结论原手册核对。
 
-RAG 的现状、已知问题和接手方法见 [`docs/rag-handoff.md`](docs/rag-handoff.md)。
+RAG 的实现原理、评测方法和已知限制见 [`docs/rag-plan.md`](docs/rag-plan.md)。

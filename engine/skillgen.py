@@ -39,10 +39,12 @@ def _ai_pattern(lines: list[str]) -> str:
     return re.escape(lines[0][:40]) if lines else ".+"
 
 
-def build(name: str, run: dict, skills_dir: Path | str | None = None, slug: str | None = None) -> dict:
+def build(name: str, run: dict, skills_dir: Path | str | None = None, slug: str | None = None,
+          source_skills_dir: Path | str | None = None) -> dict:
     """根据一次执行结果（runner 的 done 数据）生成技能目录。返回 {"skill_id", "path", "errors"}。"""
     base = Path(skills_dir or SKILLS_DIR)
-    source = load_skill(base / str(run.get("skill", "")))
+    source_base = Path(source_skills_dir or base)
+    source = load_skill(source_base / str(run.get("skill", "")))
     if not source["valid"]:
         raise ValueError(f"原技能 {run.get('skill')} 不可用，无法沉淀：" + "；".join(source["errors"]))
     title = name.strip() or "现场沉淀技能"
