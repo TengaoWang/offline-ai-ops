@@ -3,18 +3,22 @@
 GGboys · HacKU 2026 · Deep Technology Problem Statement 4（The Capability That Hasn't Travelled）
 
 在断网、资料不能外传的机房里，让现场人员拥有一位「带着厂商手册的资深同事」：
-根据故障描述选出排查技能包、在手册里检索依据并给出带出处的回答。模型与知识库全部在本机运行。
+根据故障描述选出排查技能包、在本机执行只读检查、按规则树判定，并给出带手册出处的报告；
+还能在手册里检索依据、带出处回答问题，并记住现场信息和以前的排查经历。模型与知识库全部在本机运行。
 
 ## 目录
 
 | 目录 | 内容 | 状态 |
 |---|---|---|
-| [`llm/`](llm/) | **模型与知识库接口**：`route` / `retrieve` / `ask` / `chat` / `health`，供引擎和界面调用 | 可用 |
+| [`llm/`](llm/) | **模型与知识库接口**：`route` / `retrieve` / `ask` / `answer` / `chat` / `cite` / `health`；`answer()` 对话里可以现场排查、有长期记忆 | 可用 |
+| [`engine/`](engine/) | **技能引擎**：白名单执行器、规则树、AI 补充判定、分级报告、存为技能（FR-2 ~ FR-9） | 可用，界面未接 |
+| [`skills/`](skills/) | 4 个技能包：网络连通、交换机存储空间、交换机登录、日志审计 | 可用 |
 | [`eval/`](eval/) | 技能路由评测、手册检索评测 | 可用 |
-| [`tests/`](tests/) | `llm` 接口的单元测试（不需要 Ollama） | 22 项通过 |
+| [`tests/`](tests/) | `llm`、`engine`、长期记忆的单元测试（不需要 Ollama） | 62 项通过 |
 | [`docs/`](docs/) | 需求文档、前端方案、RAG 技术路线与交接说明 | — |
 | `kb/docs/` | 厂商手册放这里（不进 git） | — |
 | `kb/index.db` | 手册索引（不进 git，可以直接拷给队友） | — |
+| `kb/memory.db`、`kb/memory/` | 长期记忆（本机数据，不进 git） | — |
 
 ## 安装 Ollama 和下载模型
 
@@ -82,6 +86,17 @@ uv pip install --python .venv/bin/python -r requirements.txt
 .venv/bin/python -m llm route "nginx 起不来"
 .venv/bin/python -m llm search "怎么检查光模块是不是坏了"
 .venv/bin/python -m llm ask "交换机 CPU 占用率高怎么处理"
+
+# 4. 对话（可以现场排查、会记住现场信息）
+.venv/bin/python -m llm answer
+#    你：记一下，MES 服务器是 192.168.10.20，接在 GE0/0/8，属于 VLAN 10
+#    你：MES 服务器连不上了，帮我查一下
+.venv/bin/python -m llm memory          # 查看长期记忆
+
+# 5. 直接执行技能
+.venv/bin/python -m engine list
+.venv/bin/python -m engine run net-unreachable
+.venv/bin/python -m engine check "ping 1.1.1.1; rm -rf /"   # 白名单拦截
 ```
 
 Windows 上把命令里的 `.venv/bin/python` 换成 `.venv\Scripts\python`。
@@ -113,6 +128,8 @@ LLM_MOCK=1 .venv/bin/python -m ui.server
 
 ## 下一步
 
+- 界面接上技能引擎和对话排查（接法见 [`docs/frontend-answer.md`](docs/frontend-answer.md) 第 11 节）
+- 在 Windows 演示机上真实执行一遍技能（目前在 macOS 上验证过）
 - 手册问答提速（目标每轮 30 秒以内）
 - 检索阶段的拒答：手册里没有的问题直接返回「未找到」，不用等模型
 - 端到端问答评测：检查回答里的命令是否正确、统计误拒率

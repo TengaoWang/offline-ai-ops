@@ -7,6 +7,8 @@
   python -m llm ask "怎么配置 trunk"    带出处的问答（只查手册）
   python -m llm answer "怎么配置 trunk" 完整流程：先判断问题类型，再给原文和整理后的回答
   python -m llm answer                 连续对话（记得上一轮，可以回答追问），直接回车退出
+                                       描述现场故障（如「MES 服务器连不上了」）时会执行排查技能
+  python -m llm memory                 查看长期记忆；python -m llm memory forget 3 删除第 3 条
 
 search / ask 默认输出给人看的格式；加 --json 输出原始数据（和 Python 接口的返回值相同）。
 search 列出结果后，可以输入编号查看那一条的全文（含同一小节的前后段）；加 --full 一次显示全部全文。
@@ -90,7 +92,31 @@ _ANSWER_TITLES = {
     "generated": "答（已核对出处）：",
     "extracted": "模型没能给出有依据的回答，以下为手册原文，请自行判断：",
     "intro": "答：", "out_of_scope": "答：", "clarify": "需要再确认一下：", "not_found": "答：",
+    "diagnosed": "答（已执行排查）：", "remembered": "答：",
 }
+_STATUS = {"success": "成功", "failed": "失败", "timeout": "超时", "rejected": "已拒绝"}
+
+
+def _print_skill_event(name: str, data: dict) -> None:
+    """排查技能执行过程：每条命令、规则树路径、AI 补充推理。"""
+    if name == "start":
+        how = "本机命令真实执行" if data.get("live") else "本机命令读回放"
+        print(f"▶ 执行技能：{data['name']}（{how}，交换机命令读回放）\n", flush=True)
+    elif name == "collect":
+        output = data["output"].strip().splitlines()
+        preview = "\n    ".join(output[:6]) + (f"\n    …（共 {len(output)} 行）" if len(output) > 6 else "")
+        print(f"  $ {data['cmd']}    [{_STATUS.get(data['status'], data['status'])} · {data['duration']}s · "
+              f"{'真实执行' if data['mode'] == 'live' else '回放' if data['mode'] == 'replay' else data['mode']}]"
+              f"\n    {preview}\n", flush=True)
+    elif name == "rules":
+        print("  规则树判定：")
+        for rule in data["rules"]:
+            print(f"    {'✓' if rule['state'] == 'hit' else '–'} {rule['label']} → {rule['branch']}")
+        print(flush=True)
+    elif name == "ai":
+        print(f"  AI 补充推理：{data['text']}\n", flush=True)
+    elif name == "report":
+        print("模型正在结合以前的排查记录写总结……\n", flush=True)
 
 
 def _print_answer(question: str, as_json: bool, history: list[dict] | None = None) -> dict:
@@ -103,6 +129,18 @@ def _print_answer(question: str, as_json: bool, history: list[dict] | None = Non
             result = {k: v for k, v in event.items() if k != "event"}
         if event["event"] == "dispatch" and not as_json and event["query"] != question:
             print(f"（理解为：{event['query']}）\n", flush=True)
+        if not as_json and event["event"] == "memory":
+            for f in event["facts"]:
+                print(f"【记忆·现场信息】{f['text']}")
+            for e in event["episodes"]:
+                print(f"【记忆·相关排查】{e['text'][:80]}")
+            print(flush=True)
+        elif not as_json and event["event"] == "remember":
+            for m in event["memories"]:
+                print(f"【已记住】{m['text']}", flush=True)
+            print()
+        elif not as_json and event["event"] == "skill":
+            _print_skill_event(event["name"], event["data"])
         if as_json:
             if event["event"] == "final":
                 print(json.dumps({k: v for k, v in event.items() if k != "event"}, ensure_ascii=False, indent=2))
@@ -119,8 +157,29 @@ def _print_answer(question: str, as_json: bool, history: list[dict] | None = Non
                 print(_ANSWER_TITLES["extracted"].rstrip("：") + "（见上方【手册原文】）")
                 if event["unsupported_commands"]:
                     print(f"  原因：回答里的命令在手册中找不到 {event['unsupported_commands']}")
+            if event.get("suggestion"):
+                print(f"\n💡 {event['suggestion']}")
             print(f"\n耗时 {event['latency_s']:.1f} 秒")
     return result
+
+
+def _memory(args: list[str]) -> None:
+    """查看 / 删除长期记忆。"""
+    import time
+
+    from . import memory
+
+    memory.sync_from_files()
+    if args[:1] == ["forget"] and len(args) == 2 and args[1].isdigit():
+        print("已删除。" if memory.forget(int(args[1])) else "没有这条记忆。")
+        return
+    items = memory.list_memories()
+    if not items:
+        print("长期记忆为空。")
+    for m in items:
+        kind = "排查记录" if m["kind"] == "episode" else "现场信息"
+        print(f"[{m['id']}] {time.strftime('%m-%d %H:%M', time.localtime(m['created']))} {kind}：{m['text']}")
+    print(f"\n文件：{memory.MEMORY_DIR}（可以直接打开修改或删除，下次运行时自动同步）")
 
 
 def _chat_loop():
@@ -139,12 +198,18 @@ def _chat_loop():
 
 
 def main():
+    # Windows 终端默认用 GBK，报告里的 🔴🟡🟢 等符号会显示不了甚至报错退出；统一用 UTF-8 输出
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     args = [a for a in sys.argv[1:] if a not in ("--json", "--full")]
     as_json = "--json" in sys.argv[1:]
     full = "--full" in sys.argv[1:]
-    if not args or args[0] not in {"health", "ingest", "embed", "route", "search", "ask", "answer"}:
+    if not args or args[0] not in {"health", "ingest", "embed", "route", "search", "ask", "answer", "memory"}:
         sys.exit(__doc__)
     command, rest = args[0], " ".join(args[1:])
+    if command == "memory":
+        return _memory(args[1:])
     if command == "health":
         result = health()
     elif command == "ingest":

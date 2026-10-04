@@ -14,3 +14,7 @@ kb/docs/*
 tests/fixtures/
 kb/index.db-journal
 kb/index-*.db
+
+# 长期记忆（本机数据，不进 git）
+kb/memory.db
+kb/memory/

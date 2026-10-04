@@ -1,0 +1,11 @@
+# 每条结论对应的手册章节号。只写章节号，页码和标题由 llm.cite() 从手册索引里查。
+refs:
+  ping:
+    sections: ["15.2"]
+    query: Ping 不通故障定位
+  port-down:
+    sections: ["8.2"]
+    query: 接口物理 DOWN 故障定位
+  vlan:
+    sections: ["22.53.3.2", "15.2.2"]
+    query: 接口加入 VLAN access 缺省 VLAN

@@ -243,9 +243,18 @@ class AnswerFlowTest(unittest.TestCase):
         self._saved = (qa.chat, qa.embed, rag.retrieve, rag.ask, rag._with_neighbors)
         rag.retrieve = lambda q, k=5: [self.PASSAGE]
         rag._with_neighbors = lambda chunks, index_path=None: [c | {"ids": [c["id"]]} for c in chunks]
+        # 长期记忆用空的临时目录，不读本机 kb/memory 里真实的记忆
+        from llm import memory
+        self._memory_tmp = tempfile.TemporaryDirectory()
+        self._memory_saved = (memory.MEMORY_DB, memory.MEMORY_DIR)
+        memory.MEMORY_DB = Path(self._memory_tmp.name) / "memory.db"
+        memory.MEMORY_DIR = Path(self._memory_tmp.name) / "memory"
 
     def tearDown(self):
         qa.chat, qa.embed, rag.retrieve, rag.ask, rag._with_neighbors = self._saved
+        from llm import memory
+        memory.MEMORY_DB, memory.MEMORY_DIR = self._memory_saved
+        self._memory_tmp.cleanup()
 
     def _dispatch_to(self, action, clarify=""):
         qa.chat = lambda *a, **kw: f'{{"action": "{action}", "clarify_question": "{clarify}"}}'

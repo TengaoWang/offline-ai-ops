@@ -1,0 +1,8 @@
+# 来源：《华为S系列园区交换机维护宝典》21.4.2.52 P1363 的 display startup 示例（字段原样）。为演示场景把文件名改为 flash 中的 s2300-v100r005.cc / vrpcfg.zip
+MainBoard:
+Configed startup system software:          flash:/s2300-v100r005.cc
+Startup system software:                   flash:/s2300-v100r005.cc
+Next startup system software:              flash:/s2300-v100r005.cc
+Startup saved-configuration file:          flash:/vrpcfg.zip
+Next startup saved-configuration file:     flash:/vrpcfg.zip
+Startup patch package:                     NULL

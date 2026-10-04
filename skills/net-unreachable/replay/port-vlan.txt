@@ -1,0 +1,8 @@
+# 来源：《华为S系列园区交换机维护宝典》15.2.2 P957 的 display port vlan 示例（格式和前 3 行原样）。为演示场景增加了 GE0/0/8（access，PVID 1，即没有加入业务 VLAN 10）和上联口 GE0/0/24
+Port                    Link Type    PVID  Trunk VLAN List
+-------------------------------------------------------------------------------
+GigabitEthernet1/0/1    trunk         1     10
+GigabitEthernet1/0/2    access        1     1-11  13-30
+GigabitEthernet1/0/3    hybrid        50    -
+GigabitEthernet0/0/8    access        1     -
+GigabitEthernet0/0/24   trunk         1     1-4094

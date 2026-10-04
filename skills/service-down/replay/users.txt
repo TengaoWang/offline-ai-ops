@@ -1,0 +1,3 @@
+# 来源：《华为S系列园区交换机维护宝典》19.3.4 P1221 的 display users 示例，原样
+User-Intf    Delay    Type   Network Address     AuthenStatus    AuthorcmdFlag
+34  VTY 0   00:00:14  TEL    192.168.2.34              pass           no        Username : Unspecified

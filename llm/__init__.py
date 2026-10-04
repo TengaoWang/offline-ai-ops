@@ -11,12 +11,13 @@ from . import config
 from .client import LLMError
 from .client import chat as _chat
 from .client import list_models
+from .cite import cite
 from .qa import answer, answer_stream
 from .rag import NOT_FOUND, ask, ingest, retrieve
 from .router import SKILLS, route
 
 __all__ = ["route", "retrieve", "ask", "answer", "answer_stream", "chat", "ingest", "health", "SKILLS",
-           "NOT_FOUND", "LLMError"]
+           "NOT_FOUND", "LLMError", "cite"]
 
 
 def chat(messages: list[dict], schema: dict | None = None, think: bool = False) -> str:
