@@ -1,38 +1,49 @@
-version: 1
+# 日志审计规则树：地址冲突告警 → 危险命令拦截；规则没覆盖的日志交给 AI（ai_review）
+start: arp-dup
 rules:
-  - id: recent-logins-readable
-    label: 最近登录记录可读取
-    when: {fact: commands.recent-logins.status, op: eq, value: success}
-    on_match:
-      branch: login-context
-      finding:
-        severity: ok
-        title: 已采集最近登录记录
-        symptom: "读取到 ${commands.recent-logins.parsed.session_count} 条非空记录"
-        root_cause: 当前仅提供审计上下文，不据此认定存在或不存在安全事件
-        fix_commands: [由现场人员核对账号、时间和来源是否符合预期]
-        ref_ids: [login-read]
-  - id: current-sessions-readable
-    label: 当前登录会话可读取
-    when: {fact: commands.current-sessions.status, op: eq, value: success}
-    on_match:
-      branch: session-context
-      finding:
-        severity: ok
-        title: 已采集当前登录会话
-        symptom: "读取到 ${commands.current-sessions.parsed.session_count} 个当前会话"
-        root_cause: 会话记录需要结合现场账号清单人工复核
-        fix_commands: [核对当前会话是否属于授权人员]
-        ref_ids: [login-read]
-  - id: audit-context
-    label: 系统上下文可读取
-    when: {fact: commands.system-load.status, op: eq, value: success}
-    on_match:
-      branch: audit-context
-      finding:
-        severity: ok
-        title: 已记录日志审计环境上下文
-        symptom: 系统运行摘要采集成功
-        root_cause: 该信息只用于审计交接，不单独构成异常结论
-        fix_commands: [将运行摘要和登录记录一并保存到现场报告]
-        ref_ids: [load-read]
+  - id: arp-dup
+    label: 日志中有 IP 地址冲突告警
+    check:
+      cmd: logbuffer
+      regex: 'ARP_DUPLICATE_IPADDR.*IpAddress=(?P<dup_ip>[\d.]+), InterfaceName=(?P<dup_if>[^,]+), MacAddress=(?P<dup_mac>[^)]+)\)'
+    hit: {branch: '地址冲突（${dup_ip}）', finding: arp-dup, next: injection}
+    miss: {branch: 没有地址冲突告警, finding: arp-ok, next: injection}
+  - id: injection
+    label: 含注入字符的命令被执行器拒绝
+    check: {cmd: injection-demo, status: [rejected]}
+    hit: {branch: 白名单拦截生效, finding: injection-blocked, next: end}
+    miss: {branch: 拦截失效, finding: injection-passed, next: end}
+findings:
+  arp-dup:
+    severity: warning
+    title: 存在 IP 地址冲突（${dup_ip}）
+    symptom: 日志出现 ARP_DUPLICATE_IPADDR：接口 ${dup_if} 收到 IP ${dup_ip} 冲突的 ARP 报文，对方 MAC ${dup_mac}。
+    root_cause: 局域网内有设备（可能是中毒的 PC）冒用了 ${dup_ip}，会导致用户时通时断。
+    fix_commands: [display logbuffer, 'display mac-address ${dup_mac}', 根据 MAC 地址表找到攻击源所在端口并处理]
+    refs: [arp-dup]
+  arp-ok:
+    severity: ok
+    title: 没有 IP 地址冲突告警
+    symptom: 日志中没有 ARP_DUPLICATE_IPADDR。
+    root_cause: 排除地址冲突。
+    fix_commands: []
+    refs: [arp-dup]
+  injection-blocked:
+    severity: ok
+    title: 危险命令已被白名单拦截
+    symptom: 「ping 1.1.1.1; rm -rf /」包含命令分隔符，执行器拒绝执行。
+    root_cause: 白名单执行器只放行只读诊断命令，含注入字符的命令一律拒绝。
+    fix_commands: []
+    refs: []
+  injection-passed:
+    severity: critical
+    title: 白名单拦截失效
+    symptom: 含注入字符的命令没有被拒绝。
+    root_cause: 执行器配置错误，需立即检查 engine/whitelist.yaml。
+    fix_commands: []
+    refs: []
+# 规则没覆盖的日志交给 AI 补充判断（FR-5）
+ai_review:
+  - cmd: logbuffer
+    line: '%%\d+\w+/\d/'
+    covered: [ARP_DUPLICATE_IPADDR]

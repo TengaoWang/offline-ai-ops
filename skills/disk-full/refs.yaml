@@ -1,18 +1,10 @@
-version: 1
 refs:
-  - id: disk-capacity
-    resolver: static
-    source:
-      path: docs/内置离线运维诊断基线.md
-      file: 内置离线运维诊断基线.md
-      section: 磁盘容量只读检查
-      page: null
-      text: "使用 `df -P` 读取本机各文件系统的容量与使用率；该命令只读取文件系统统计信息，不修改磁盘内容。使用率达到或超过 90% 时应标记为容量警告，并由现场人员确认需要清理或扩容的对象。"
-  - id: temp-capacity
-    resolver: static
-    source:
-      path: docs/内置离线运维诊断基线.md
-      file: 内置离线运维诊断基线.md
-      section: 磁盘容量只读检查
-      page: null
-      text: "使用 `du -sk /tmp` 读取临时目录占用量；该命令只汇总目录大小。目录扫描失败时应报告未能获取，不得伪造数值。"
+  free-space:
+    sections: ["21.4.2.65"]
+    query: 如何释放存储空间
+  upgrade-space:
+    sections: ["21.4.2.58"]
+    query: 升级时存储空间充足 删除闲置系统软件
+  recycle:
+    sections: ["21.4.2.21"]
+    query: 查看已删除文件 回收站

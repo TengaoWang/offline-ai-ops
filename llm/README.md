@@ -12,6 +12,7 @@ from llm import route, retrieve, ask, answer, chat, health
 | `retrieve(问题, k=5)` | 在手册里检索最相关的 k 段（不调用大模型，约 0.06 秒） | `[{"id", "text", "file", "page", "section", "label", "score", "vec_score", "bm25_rank", "vec_rank", "mode"}]` |
 | `ask(问题, k=5)` | 根据手册回答并附出处；找不到依据就明确说没找到（15 到 50 秒） | `{"answer", "found", "citations": [{"n", "file", "page", "section", "label", "text"}], "unsupported_commands", "latency_s"}` |
 | `answer(问题, history=None)` | **完整流程（新增，可选）**：先判断问题类型（打招呼 / 超出范围 / 太笼统 / 手册问题），手册问题先截取原文、再让模型整理回答；回答没通过核对就退回原文 | `{"question", "query", "action", "answer_type", "answer", "citations", "extract", "unsupported_commands", "latency_s"}` |
+| `cite(sections, query=None)` | **强制溯源（新增）**：手册章节号（如 `"8.2"`）→ 真实出处；章节号找不到时按 `query` 检索；都找不到返回 `[]`（显示「手册中未找到依据」） | `[{"label", "file", "page", "section", "text", "via"}]` |
 | `chat(messages, schema=None, think=False)` | 通用模型调用，例如规则树未覆盖时的「AI 补充推理」 | 回复文本（传 `schema` 时为 JSON 字符串） |
 | `health()` | 检查模型后端、模型、向量模型、索引和发布修订是否就绪 | `{"backend", "backend_ready", "model", "embed_model", "index", "index_revision", "chunks", "vectors"}` |
 
@@ -39,6 +40,30 @@ for question in ["s5700", "型号规格"]:
 | `generated` | 模型整理的回答，已通过出处和命令核对 | 显示回答和出处 |
 | `extracted` | 模型的回答没通过核对，`answer` 是手册原文 | 标明「以下为手册原文」，并显示出处 |
 | `not_found` | 手册里没找到相关内容 | 直接显示 |
+
+## 对话里排查现场故障、长期记忆（新增）
+
+`answer()` / `python -m llm answer` 的对话里，可以直接让 AI 动手排查，它会记住现场信息和以前的排查经历：
+
+```text
+你：记一下，MES 服务器是 192.168.10.20，接在交换机 GE0/0/8，属于 VLAN 10
+答：好的，已记住：…                                  ← 写入长期记忆（answer_type: remembered）
+
+你：MES 服务器连不上了，帮我查一下
+【记忆·现场信息】MES 服务器是 192.168.10.20 …       ← 先查长期记忆，参数从记忆里取
+▶ 执行技能：网络连通排查（本机命令真实执行，交换机命令读回放）
+  $ ping -c 2 -t 2 192.168.10.20  [失败 · 真实执行] …   ← engine：白名单命令 → 规则树 → 手册出处
+答（已执行排查）：本次问题与 10月04日 那次一样…      ← 模型结合以前的排查记录总结（answer_type: diagnosed）
+诊断报告：🔴 端口 GigabitEthernet0/0/8 的 VLAN 划分错误 [1][2] …
+
+你：交换机 SSH 一直登不上                          ← 只描述现象：照常查手册回答
+💡 要我现场排查吗？回复「好」…                      ← 回复「好」就执行「交换机登录排查」
+```
+
+- **什么时候执行技能**：调度器多了 `diagnose`、`remember` 两类。只有明确要求动手（「帮我查一下」「排查一下」「体检」等）才执行；只描述现象时仍按手册回答，并提示可以现场排查。这样原来的手册问答不受影响（调度器评测带技能时 48/51，不带时 50/51；多错的两题是「华为交换机」「帮我看看交换机」，应追问却分别当成了打招呼和直接回答）。
+- **技能参数**：只接受用户这句话或长期记忆里真实出现过的值（接口简写 GE0/0/8 自动换成 GigabitEthernet0/0/8），模型编造的值丢掉；最终命令还要过白名单。
+- **长期记忆**：`kb/memory.db`（检索，bge-m3 向量）+ `kb/memory/*.md`（每条一个文件，可以直接改或删，下次运行自动同步）。`python -m llm memory` 查看，`python -m llm memory forget 3` 删除。不进 git。
+- `answer()` 的返回值多了 `skill`、`run`（技能执行结果，和界面诊断流的 done 一样）、`remembered`、`suggest_skill`、`suggestion`；`answer_stream()` 多了 `memory`、`remember`、`skill` 事件。原有字段不变。
 
 ## 返回值说明
 

@@ -1,42 +1,27 @@
-version: 1
+platform: windows                # 演示平台；本机命令同时写了 macOS 版本（开发机上也能真实执行）
+timeout: 10
+vars:
+  target: 192.168.10.20          # 不通的业务地址（MES 服务器），可用 OPS_TARGET 修改
+  gateway:                       # 默认网关：Windows 从 ipconfig 取，macOS 从 netstat -rn 取；都取不到用 default
+    from: [ipconfig, route]
+    regex: '(?:默认网关|Default Gateway)[ .]*:\s*(?:[0-9A-Fa-f:]+%\d+\s+)?(\d+\.\d+\.\d+\.\d+)|^default\s+(\d+\.\d+\.\d+\.\d+)'
+    default: 192.168.10.1
+  port: GigabitEthernet0/0/8     # 目标服务器接在交换机的哪个端口
+  vlan: "10"                     # 该端口应属的业务 VLAN
 commands:
-  - id: target-ping
-    argv: [ping, -c, "1", 192.0.2.1]
-    timeout_s: 4
-    required: false
-    parser: ping
-    simulation:
-      status: failed
-      returncode: 1
-      duration_s: 1.0
-      output: "1 packets transmitted, 0 received, 100% packet loss"
-  - id: loopback-ping
-    argv: [ping, -c, "1", 127.0.0.1]
-    timeout_s: 4
-    required: true
-    parser: ping
-    simulation:
-      status: success
-      returncode: 0
-      duration_s: 0.02
-      output: "1 packets transmitted, 1 received, 0% packet loss"
-  - id: route-table
-    argv: [netstat, -rn]
-    timeout_s: 5
-    required: false
-    parser: line_count
-    simulation:
-      status: success
-      returncode: 0
-      duration_s: 0.03
-      output: "Routing tables\nDestination Gateway Flags\ndefault 192.168.10.1 UGSc"
-  - id: host-info
-    argv: [uname, -n]
-    timeout_s: 3
-    required: false
-    parser: generic
-    simulation:
-      status: success
-      returncode: 0
-      duration_s: 0.01
-      output: "test-host"
+  - id: ipconfig
+    run: {windows: ipconfig /all, mac: ifconfig}
+  - id: route                    # 只在 macOS 上执行（Windows 的网关已经在 ipconfig 里）
+    run: {mac: netstat -rn}
+  - id: ping-gateway
+    run: {windows: 'ping -n 2 -w 1000 ${gateway}', mac: 'ping -c 2 -t 2 ${gateway}'}
+  - id: ping-target
+    run: {windows: 'ping -n 2 -w 1000 ${target}', mac: 'ping -c 2 -t 2 ${target}'}
+  - id: arp
+    run: {windows: arp -a, mac: arp -an}
+  - id: if-brief
+    run: display interface brief
+    target: switch
+  - id: port-vlan
+    run: display port vlan
+    target: switch

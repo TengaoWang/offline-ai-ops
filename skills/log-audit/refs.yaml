@@ -1,26 +1,4 @@
-version: 1
 refs:
-  - id: login-read
-    resolver: static
-    source:
-      path: docs/内置离线运维诊断基线.md
-      file: 内置离线运维诊断基线.md
-      section: 日志审计只读检查
-      page: null
-      text: "使用 `last -n 5` 读取最近登录记录，使用 `who` 读取当前登录会话；两条命令都只读取会话记录。没有输出不等于发生安全事件，需要结合目标系统的日志保留策略人工确认。"
-  - id: audit-boundary
-    resolver: static
-    source:
-      path: docs/内置离线运维诊断基线.md
-      file: 内置离线运维诊断基线.md
-      section: 日志审计只读检查
-      page: null
-      text: "日志审计结果只能描述已经采集到的记录。缺少日志、权限不足或命令失败时，必须列入未决项，不能推断不存在异常。"
-  - id: load-read
-    resolver: static
-    source:
-      path: docs/内置离线运维诊断基线.md
-      file: 内置离线运维诊断基线.md
-      section: 服务和进程只读检查
-      page: null
-      text: "使用 `uptime` 读取系统运行时间和负载摘要；该结果用于提供诊断上下文，不应单独推断根因。"
+  arp-dup:
+    sections: ["21.8.1.5"]
+    query: 设备作为网关 局域网用户时通时断 地址冲突

@@ -1,34 +1,7 @@
-version: 1
 refs:
-  - id: process-read
-    resolver: static
-    source:
-      path: docs/内置离线运维诊断基线.md
-      file: 内置离线运维诊断基线.md
-      section: 服务和进程只读检查
-      page: null
-      text: "使用 `ps -axo pid,comm` 读取本机进程编号和命令名；该命令不启动、停止或修改进程。采集成功只能证明进程列表可读取，不能单独证明某个业务服务健康。"
-  - id: socket-read
-    resolver: static
-    source:
-      path: docs/内置离线运维诊断基线.md
-      file: 内置离线运维诊断基线.md
-      section: 服务和进程只读检查
-      page: null
-      text: "使用 `netstat -an` 读取本机网络连接和监听状态；该命令不打开或关闭端口。服务故障仍需结合服务状态和日志判断。"
-  - id: load-read
-    resolver: static
-    source:
-      path: docs/内置离线运维诊断基线.md
-      file: 内置离线运维诊断基线.md
-      section: 服务和进程只读检查
-      page: null
-      text: "使用 `uptime` 读取系统运行时间和负载摘要；该结果用于提供诊断上下文，不应单独推断根因。"
-  - id: service-read
-    resolver: static
-    source:
-      path: docs/内置离线运维诊断基线.md
-      file: 内置离线运维诊断基线.md
-      section: 服务和进程只读检查
-      page: null
-      text: "`systemctl status nginx` 是 Linux 上读取 nginx 服务状态的命令；如果目标系统没有 systemd 或没有该服务，应将采集标记为失败并继续处理可选检查，不得执行启动或重启操作。"
+  ssh-network:
+    sections: ["19.3.2"]
+    query: SSH 客户端到服务端网络是否通畅
+  ssh-config:
+    sections: ["19.3.4"]
+    query: 检查 SSH 客户端和服务端配置 STelnet 使能

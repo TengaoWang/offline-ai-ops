@@ -58,6 +58,52 @@ DISPATCH_SCHEMA = {
     "required": ["action", "clarify_question", "query"],
 }
 
+# 对话里的「排查」和「记忆」（新增，可选）：answer(..., diagnose=True) 时调度器多 diagnose / remember 两类，
+# 执行技能并把报告作为回答。默认关闭：界面（ui/service.py）调用 answer() 的行为和原来完全一样。
+DIAGNOSE_PROMPT = """
+
+另外还有两类：
+- remember：用户只是在告诉你现场信息、让你记住（例如「记一下，MES 服务器是 192.168.10.20」），没有要你排查。
+- diagnose：用户在描述**现场正在发生**的故障，需要你动手检查设备和网络，例如「MES 服务器连不上了」
+  「帮我查一下网络」「交换机 SSH 登不上」「升级提示存储空间不足」「看看交换机日志有没有异常」「一键体检」。
+  这时从下面的技能里选一个填到 skill，并填写技能参数 vars：只填用户这句话或「已记住的现场信息」里
+  明确给出的值，没有就不填，不要编造。
+  只是在问「怎么排查」「某个命令什么意思」「某种现象一般是什么原因」，属于 answer，不是 diagnose。
+  但如果是 answer、而用户描述的故障现象正好是某个技能能检查的（例如「SSH 登不上」对应登录排查），
+  skill 也填那个技能（系统会在回答后问用户要不要现场排查）；和技能无关就填空字符串。
+
+不管哪一类，如果用户这句话里有以后还会用到的现场信息（例如「MES 服务器是 192.168.10.20」「接在 GE0/0/8」），
+写到 facts：每条写 text（一句完整的话）；如果正好对应某个技能参数，再写 skill、var、value。没有就返回空列表。
+
+可用技能：
+{skills}
+
+{memory}"""
+
+
+# 只有用户明确要求动手检查时才执行技能；只描述现象（「SSH 连不上」）仍然查手册回答，并提示可以现场排查。
+# 这样原来的手册问答不会被抢走（调度器评测里的问题全是这一类）。
+_WANTS_CHECK = re.compile(r"(帮我|给我|替我|麻烦|请)(查|排查|检查|诊断|测)|(排查|检查|诊断|查|看|测)一下|体检|巡检|"
+                          r"(开始|现在|马上)(排查|检查|诊断)|跑一下|执行一下")
+_AGREE = re.compile(r"^(好|好的|可以|行|嗯|是|对|查吧|查一下|排查吧|开始吧?|执行吧?|ok|yes)[。！!. ]*$", re.I)
+
+
+def _dispatch_schema(skills: list[dict]) -> dict:
+    var_names = sorted({v for s in skills for v in s["vars"]}) or [""]
+    schema = json.loads(json.dumps(DISPATCH_SCHEMA))
+    schema["properties"]["action"]["enum"] = DISPATCH_SCHEMA["properties"]["action"]["enum"] + ["diagnose", "remember"]
+    schema["properties"].update({
+        "skill": {"type": "string", "enum": [s["id"] for s in skills] + [""]},
+        "vars": {"type": "array", "items": {"type": "object", "properties": {
+            "name": {"type": "string", "enum": var_names}, "value": {"type": "string"}}, "required": ["name", "value"]}},
+        "facts": {"type": "array", "items": {"type": "object", "properties": {
+            "text": {"type": "string"}, "skill": {"type": "string"}, "var": {"type": "string"},
+            "value": {"type": "string"}}, "required": ["text"]}},
+    })
+    schema["required"] = DISPATCH_SCHEMA["required"] + ["skill", "vars", "facts"]
+    return schema
+
+
 # 新流程专用的回答提示词（rag.ask() 默认的 ANSWER_PROMPT 不变，界面调用的 ask() 不受影响）
 QA_ANSWER_PROMPT = """你是离线机房运维助手。只能根据下面带编号的手册片段回答用户问题。
 规则：
@@ -130,36 +176,77 @@ def _needs_password_context(query: str) -> bool:
     return lost and not has_context
 
 
-def dispatch(question: str, history: list[dict] | None = None, locale: str = "zh-CN") -> dict:
-    """返回 {"action": "greet" | "reject" | "clarify" | "answer", "clarify_question": 追问（仅 clarify）,
-    "query": 结合上下文后的完整问题}。
+def dispatch(question: str, history: list[dict] | None = None, locale: str = "zh-CN",
+             skills: list[dict] | None = None, recalled: dict | None = None) -> dict:
+    """返回 {"action": "greet" | "reject" | "clarify" | "answer" | "diagnose" | "remember", "clarify_question": 追问（仅 clarify）,
+    "query": 结合上下文后的完整问题, "skill", "vars", "facts", "suggest_skill"}。
 
     history 是之前几轮 answer() 的返回值（含 question、action、answer），可以不传。
     上一轮已经追问过时，这一轮不再追问，直接去查手册（最多追问一次）。
+    skills：可执行的技能（diagnose.available_skills()）；不传或为空时没有 diagnose / remember，和原来的行为一样。
+    recalled：长期记忆（diagnose.recall()），给调度器取技能参数用。
     """
     history = history or []
+    skills = skills or []
     if config.MOCK:
         action = "greet" if any(g in question.lower() for g in _MOCK_GREETINGS) else "answer"
-        return {"action": action, "clarify_question": "", "query": question}
+        return {"action": action, "clarify_question": "", "query": question, "skill": "", "vars": [], "facts": [],
+                "suggest_skill": None}
     content = question if not history else f"之前的对话：\n{_history_text(history)}\n\n用户现在说：{question}"
     prompt = DISPATCH_PROMPT
     if locale == "en":
         prompt += ("\nThe query field must preserve the user's language so retrieval remains accurate. "
                    "When action is clarify, write clarify_question in English.")
+    schema = DISPATCH_SCHEMA
+    if skills:
+        from .diagnose import recall_text, skills_text
+        prompt += DIAGNOSE_PROMPT.format(skills=skills_text(skills),
+                                         memory=recall_text(recalled or {"facts": [], "episodes": []}))
+        schema = _dispatch_schema(skills)
     raw = chat([{"role": "system", "content": prompt}, {"role": "user", "content": content}],
-               schema=DISPATCH_SCHEMA)
+               schema=schema)
     try:
         reply = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise LLMProtocolError("问题分流返回了无效 JSON") from exc
-    if not isinstance(reply, dict) or reply.get("action") not in DISPATCH_SCHEMA["properties"]["action"]["enum"]:
+    if not isinstance(reply, dict) or reply.get("action") not in schema["properties"]["action"]["enum"]:
         raise LLMProtocolError("问题分流返回结构不符合契约")
     action = reply["action"]
     clarify = (reply.get("clarify_question") or "").strip()
     query = (reply.get("query") or "").strip() or question
     if action == "clarify" and (not clarify or (history and history[-1].get("action") == "clarify")):
         action = "answer"  # 没给出追问，或者上一轮已经追问过：按普通问题去查手册
-    return {"action": action, "clarify_question": clarify if action == "clarify" else "", "query": query}
+    if not skills:
+        return {"action": action, "clarify_question": clarify if action == "clarify" else "", "query": query,
+                "skill": "", "vars": [], "facts": [], "suggest_skill": None}
+    skill = reply.get("skill") or ""
+    offered = history[-1].get("suggest_skill") if history else None
+    if offered and _AGREE.match(question.strip()):
+        # 上一轮提示「要我现场排查吗」，用户回答「好」：执行上一轮建议的技能，问题用上一轮的
+        action, skill, query = "diagnose", offered, history[-1].get("query") or query
+    suggest = None
+    if action == "diagnose" and skill not in {s["id"] for s in skills}:
+        action = "answer"  # 没选出可执行的技能：按普通问题去查手册
+    elif action == "diagnose" and not (offered and _AGREE.match(question.strip())) and not _WANTS_CHECK.search(question):
+        action, suggest = "answer", skill  # 没有明确要求动手检查：先查手册回答，再提示可以现场排查
+    elif action == "answer" and skill in {s["id"] for s in skills}:
+        suggest = skill  # 手册问题，但描述的现象有对应的技能：回答后提示可以现场排查
+    # 技能参数只接受这句话或长期记忆里真实出现过的值，模型编造的（如「未知」「80」）丢掉
+    source_text = question + "".join(f["text"] for f in (recalled or {}).get("facts", []))
+    variables = [v for v in reply.get("vars") or [] if v.get("value") and _value_in(v["value"], source_text)]
+    return {"action": action, "clarify_question": clarify if action == "clarify" else "", "query": query,
+            "skill": skill if action == "diagnose" else "", "vars": variables if action == "diagnose" else [],
+            "facts": reply.get("facts") or [], "suggest_skill": suggest}
+
+
+def _value_in(value: str, text: str) -> bool:
+    """参数值是否真的出现在用户的话或记忆里（接口名允许简写：GE0/0/8 ↔ GigabitEthernet0/0/8）。"""
+    compact = re.sub(r"\s+", "", text).lower()
+    value = re.sub(r"\s+", "", value).lower()
+    if value in compact:
+        return True
+    number = re.search(r"\d+/\d+/\d+$", value)
+    return bool(number and number.group(0) in compact)
 
 
 def _line_scores(question: str, lines: list[str]) -> list[float]:
@@ -198,14 +285,20 @@ def extract(question: str, passage: dict) -> dict:
             "section": passage["section"], "label": rag._cite_label(passage)}
 
 
-def answer_stream(question: str, history: list[dict] | None = None, locale: str = "zh-CN"):
+def answer_stream(question: str, history: list[dict] | None = None, locale: str = "zh-CN",
+                  diagnose: bool = False):
     """按步骤产出结果，界面可以先显示原文，再显示模型整理的回答：
 
+      {"event": "memory", "facts": [...], "episodes": [...]}   （仅 diagnose=True）长期记忆里和这句话相关的内容
       {"event": "dispatch", "action": ...}
+      {"event": "remember", "memories": [...]}       （仅 diagnose=True）这句话里提到、已记住的现场信息
+      {"event": "skill", "name": ..., "data": ...}   （仅 diagnose=True 且 action 为 diagnose）技能执行的每一步，
+                                                     name / data 和 engine.SkillEngine.run() 的 emit 相同
       {"event": "extract", "extract": {...}}        只有 action 为 answer 且检索到内容时
       {"event": "final", ...answer() 的返回值}
 
     history：之前几轮 answer() 的返回值（可以不传）。用户回答追问时，会和上一句合成完整的问题再去查。
+    diagnose：打开「对话里排查 + 长期记忆」（命令行 python -m llm answer 默认打开）；默认关闭，界面行为不变。
     """
     start = time.perf_counter()
     locale = "en" if locale == "en" else "zh-CN"
@@ -214,10 +307,47 @@ def answer_stream(question: str, history: list[dict] | None = None, locale: str 
     def final(**result):
         base = {"question": question, "query": routed["query"], "action": "answer", "answer_type": "not_found",
                 "answer": not_found, "citations": [], "extract": None, "unsupported_commands": []}
+        if diagnose:
+            base |= {"skill": None, "run": None, "remembered": remembered,
+                     "suggest_skill": routed.get("suggest_skill"), "suggestion": suggestion}
         return {"event": "final", **base, **result, "latency_s": round(time.perf_counter() - start, 3)}
 
-    routed = dispatch(question, history, locale=locale)
+    skills, recalled, remembered, suggestion = [], {"facts": [], "episodes": []}, [], None
+    if diagnose and not config.MOCK:
+        from . import diagnose as tools  # 对话里的排查和长期记忆（新增）
+
+        skills = tools.available_skills()
+        if skills:
+            recalled = tools.recall(question)
+            if recalled["facts"] or recalled["episodes"]:
+                yield {"event": "memory", **recalled}
+    routed = dispatch(question, history, locale=locale, skills=skills, recalled=recalled)
     yield {"event": "dispatch", "action": routed["action"], "query": routed["query"]}
+    if skills:
+        names = {sk["id"]: sk["name"] for sk in skills}
+        if routed.get("suggest_skill") in names:
+            suggestion = f"要我现场排查吗？回复「好」，我会执行「{names[routed['suggest_skill']]}」技能（只执行只读命令）。"
+        remembered = tools.remember(routed["facts"], set(names))
+        if remembered:
+            yield {"event": "remember", "memories": remembered}
+        if routed["action"] == "remember":
+            text = ("好的，已记住：\n" + "\n".join(f"- {m['text']}" for m in remembered)) if remembered else \
+                "好的。不过我没有从这句话里找到需要记住的现场信息，可以说得具体一些，例如「MES 服务器是 192.168.10.20」。"
+            yield final(action="remember", answer_type="remembered", answer=text)
+            return
+        if routed["action"] == "diagnose":
+            run = None
+            for name, data in tools.run(routed["skill"], routed["vars"]):
+                yield {"event": "skill", "name": name, "data": data}
+                if name == "done":
+                    run = data
+            cites, index = tools.citations(run)
+            summary = tools.summarize(routed["query"], run, recalled["episodes"])
+            episode = tools.save_episode(routed["query"], routed["skill"], run)
+            yield final(action="diagnose", answer_type="diagnosed", skill=routed["skill"], run=run, citations=cites,
+                        answer=f"{summary}\n\n诊断报告：\n{tools.report_text(run, index)}",
+                        remembered=remembered + [episode])
+            return
     if routed["action"] == "greet":
         yield final(action="greet", answer_type="intro", answer=INTRO_EN if locale == "en" else INTRO)
         return
@@ -272,7 +402,7 @@ def answer_stream(question: str, history: list[dict] | None = None, locale: str 
                     extract=excerpt, unsupported_commands=generated["unsupported_commands"])
 
 
-def answer(question: str, history: list[dict] | None = None, locale: str = "zh-CN") -> dict:
+def answer(question: str, history: list[dict] | None = None, locale: str = "zh-CN", diagnose: bool = False) -> dict:
     """手册问答的新入口。history 是之前几轮 answer() 的返回值，用于多轮对话（可以不传）。返回：
 
     {"question": 用户原话, "query": 结合上下文后的完整问题,
@@ -286,8 +416,13 @@ def answer(question: str, history: list[dict] | None = None, locale: str = "zh-C
 
     answer_type 为 generated：模型整理的回答，已通过核对；extracted：模型的回答没通过核对，
     显示的是手册原文（界面应标明「以下为手册原文」）。
+
+    diagnose=True 时（命令行对话默认打开，界面默认关闭）还可能返回：
+    action "diagnose" / answer_type "diagnosed"：已执行技能，answer 是总结 + 诊断报告，run 是技能执行结果；
+    action "remember" / answer_type "remembered"：记住了用户说的现场信息；
+    并多出 skill、run、remembered、suggest_skill、suggestion 字段。
     """
-    for event in answer_stream(question, history, locale=locale):
+    for event in answer_stream(question, history, locale=locale, diagnose=diagnose):
         if event["event"] == "final":
             return {k: v for k, v in event.items() if k != "event"}
     raise RuntimeError("answer_stream 没有产出 final")  # 不会发生

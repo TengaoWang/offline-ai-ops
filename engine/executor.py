@@ -1,173 +1,205 @@
-"""Allowlisted read-only command execution. Commands are never passed to a shell."""
+"""白名单命令执行器（FR-9、FR-3）。
+
+一条命令要过 4 关：① 危险字符 → ② 拆分参数 → ③ 白名单校验 → ④ 不经过 shell 执行（带超时）。
+本机命令（ping、ipconfig 等）在 Windows 上真实执行；交换机命令（display、dir）读取技能目录里的回放文件。
+
+    from engine.executor import check, execute
+    check("ping 1.1.1.1; rm -rf /")   # → (False, "包含危险字符「;」")
+    execute("ping -n 2 -w 1000 192.168.10.1")
+"""
+
 from __future__ import annotations
 
+import os
 import re
 import shlex
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Callable
 
+import yaml
 
-class CommandRejected(ValueError):
-    pass
+WHITELIST_PATH = Path(__file__).with_name("whitelist.yaml")
+REJECTED_TEXT = "该命令不在白名单，已拒绝"
+OUTPUT_LIMIT = 8 * 1024
+DEFAULT_TIMEOUT = 10
 
+_HOST = re.compile(r"^(?:\d{1,3}(?:\.\d{1,3}){3}|[A-Za-z0-9](?:[A-Za-z0-9.-]{0,252}))$")
+_WORD = re.compile(r"^[A-Za-z0-9][A-Za-z0-9/:._-]*$")
 
-FORBIDDEN = re.compile(r"[;|&`<>\r\n]|\$\(")
-HOST = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.:%_-]{0,252}$")
-SERVICE = re.compile(r"^[A-Za-z0-9@_.:-]{1,128}$")
-MAX_OUTPUT_BYTES = 64 * 1024
-DEFAULT_TIMEOUT_S = 10.0
-MAX_TIMEOUT_S = 30.0
-SAFE_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
-
-
-def _small_int(value: str, maximum: int) -> bool:
-    return value.isdigit() and 0 < int(value) <= maximum
+_whitelist: dict | None = None
 
 
-def _safe_log_path(value: str) -> bool:
-    path = Path(value)
-    return path.is_absolute() and ".." not in path.parts and path.parts[:2] == ("/", "var") and len(path.parts) >= 3 and path.parts[2] == "log"
+def whitelist() -> dict:
+    global _whitelist
+    if _whitelist is None:
+        _whitelist = yaml.safe_load(WHITELIST_PATH.read_text(encoding="utf-8"))
+    return _whitelist
 
 
-def _policy(program: str, args: list[str]) -> bool:
-    if program == "df":
-        return args in (["-P"], ["-h"])
-    if program == "ping":
-        return (len(args) == 3 and args[0] in {"-c", "-n"} and _small_int(args[1], 4)
-                and bool(HOST.fullmatch(args[2])) and not args[2].startswith("-"))
-    if program == "netstat":
-        return args in (["-rn"], ["-an"])
-    if program == "ps":
-        return args in (["-axo", "pid,comm"], ["aux"])
-    if program in {"uptime", "who"}:
-        return not args
-    if program == "last":
-        return len(args) == 2 and args[0] == "-n" and _small_int(args[1], 20)
-    if program == "uname":
-        return args in (["-a"], ["-n"])
-    if program == "ss":
-        return args in (["-ltn"], ["-ltnp"])
-    if program == "systemctl":
-        return len(args) == 2 and args[0] in {"status", "show", "is-active"} and bool(SERVICE.fullmatch(args[1]))
-    if program == "journalctl":
-        return (len(args) == 5 and args[0] == "-u" and bool(SERVICE.fullmatch(args[1]))
-                and args[2] == "-n" and _small_int(args[3], 200) and args[4] == "--no-pager")
-    if program == "tail":
-        return len(args) == 3 and args[0] == "-n" and _small_int(args[1], 200) and _safe_log_path(args[2])
-    if program == "du":
-        return len(args) == 2 and args[0] in {"-sk", "-sh"} and args[1] in {"/tmp", "/var/log"}
-    return False
+def _check_args(name: str, args: list[str], rule: dict) -> str | None:
+    """按白名单规则检查参数；通过返回 None，否则返回原因。"""
+    flags = rule.get("flags") or {}
+    allowed = rule.get("args")
+    positional = []
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg in flags:
+            spec = flags[arg]
+            if spec is not None:  # 后面要跟一个整数
+                if i + 1 >= len(args) or not args[i + 1].isdigit():
+                    return f"{arg} 后面需要一个数字"
+                if int(args[i + 1]) > spec["max"]:
+                    return f"{arg} 的值不能超过 {spec['max']}"
+                i += 1
+        elif arg.startswith("-"):
+            return f"不允许的参数「{arg}」"
+        else:
+            positional.append(arg)
+        i += 1
+    if len(positional) > rule.get("max_args", 0):
+        return "参数过多"
+    for arg in positional:
+        if allowed == "host":
+            if not _HOST.match(arg):
+                return f"「{arg}」不是合法的 IP 或主机名"
+        elif allowed == "word":
+            if not _WORD.match(arg):
+                return f"不允许的参数「{arg}」"
+        elif isinstance(allowed, list):
+            if arg.lower() not in allowed:
+                return f"不允许的参数「{arg}」"
+        else:
+            return f"{name} 不接受参数「{arg}」"
+    return None
 
 
-def validate_argv(argv) -> list[str]:
-    if not isinstance(argv, list) or not 1 <= len(argv) <= 32 or not all(isinstance(x, str) for x in argv):
-        raise CommandRejected("命令必须是 1～32 项字符串参数数组")
-    if any(not value or len(value) > 512 or FORBIDDEN.search(value) for value in argv):
-        raise CommandRejected("命令包含空参数、超长参数或 shell 注入字符")
-    program = argv[0]
-    if Path(program).name != program or not _policy(program, argv[1:]):
-        raise CommandRejected(f"命令不在只读白名单：{shlex.join(argv)}")
-    return list(argv)
+def check(command: str, target: str = "local") -> tuple[bool, str]:
+    """校验一条命令能否执行。target：local（本机 Windows）/ local_mac（本机 macOS）/ switch（交换机）。
+    返回 (是否放行, 原因)。"""
+    rules = whitelist()
+    for char in rules["dangerous_chars"]:
+        if char in command:
+            shown = {"\n": "换行", "\r": "换行"}.get(char, char)
+            return False, f"包含危险字符「{shown}」"
+    try:
+        args = shlex.split(command)
+    except ValueError as exc:
+        return False, f"无法解析：{exc}"
+    if not args:
+        return False, "空命令"
+    name = args[0].lower()
+    if name in rules["denied"]:
+        return False, f"「{args[0]}」是禁止执行的命令"
+    table = rules.get(target) or {}
+    if name not in table:
+        return False, f"「{args[0]}」不在白名单"
+    reason = _check_args(name, args[1:], table[name])
+    if reason:
+        return False, reason
+    return True, "ok"
 
 
 def _decode(data: bytes) -> str:
-    return data.decode("utf-8", "replace")
-
-
-def _bounded(data: bytes) -> tuple[str, bool]:
-    truncated = len(data) > MAX_OUTPUT_BYTES
-    value = data[:MAX_OUTPUT_BYTES]
-    text = _decode(value)
-    if truncated:
-        text += "\n[输出已截断：超过 64 KiB]"
-    return text, truncated
-
-
-def parse_output(name: str, output: str, returncode: int) -> dict:
-    if name == "ping":
-        loss = re.search(r"(\d+(?:\.\d+)?)%\s*(?:packet )?loss", output, re.I)
-        success_rate = re.search(r"Success rate is\s+(\d+)\s+percent", output, re.I)
-        loss_pct = float(loss.group(1)) if loss else (100.0 - float(success_rate.group(1)) if success_rate else (0.0 if returncode == 0 else 100.0))
-        return {"loss_pct": loss_pct, "reachable": returncode == 0 and loss_pct < 100}
-    if name == "df_posix":
-        candidates = []
-        for line in output.splitlines()[1:]:
-            parts = line.split()
-            if len(parts) >= 6 and parts[-2].endswith("%") and parts[-2][:-1].isdigit():
-                candidates.append((int(parts[-2][:-1]), parts[-1]))
-        usage, mount = max(candidates, default=(0, ""))
-        return {"max_usage_pct": usage, "fullest_mount": mount, "filesystems": len(candidates)}
-    if name == "line_count":
-        lines = [line for line in output.splitlines() if line.strip()]
-        return {"line_count": max(0, len(lines) - 1)}
-    if name == "session_count":
-        return {"session_count": len([line for line in output.splitlines() if line.strip()])}
-    return {"returncode": returncode, "has_output": bool(output.strip())}
-
-
-class Executor:
-    def __init__(self, runtime_dir: Path | str):
-        self.runtime_dir = Path(runtime_dir)
-        self.runtime_dir.mkdir(parents=True, exist_ok=True)
-
-    def execute_one(self, command: dict, mode: str) -> dict:
-        argv = validate_argv(command.get("argv"))
-        timeout = float(command.get("timeout_s", DEFAULT_TIMEOUT_S))
-        if not 0 < timeout <= MAX_TIMEOUT_S:
-            raise CommandRejected("命令超时必须大于 0 且不超过 30 秒")
-        started = time.perf_counter()
-        if mode == "simulation":
-            fixture = command.get("simulation") or {}
-            status = fixture.get("status", "success")
-            if status not in {"success", "failed", "timeout"}:
-                raise CommandRejected("simulation.status 非法")
-            output, truncated = _bounded(str(fixture.get("output", "")).encode("utf-8"))
-            returncode = int(fixture.get("returncode", 0 if status == "success" else 1))
-            duration = float(fixture.get("duration_s", 0.01))
-            parsed = parse_output(command.get("parser", "generic"), output, returncode)
-            return {"command_id": command["id"], "argv": argv, "display": shlex.join(argv),
-                    "cmd": shlex.join(argv), "output": output, "status": status,
-                    "returncode": returncode, "duration_s": duration, "duration": duration,
-                    "required": bool(command.get("required", True)), "truncated": truncated, "parsed": parsed}
-        if mode != "real":
-            raise CommandRejected("执行模式只允许 real 或 simulation")
-        env = {"PATH": SAFE_PATH, "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"}
+    """中文 Windows 的命令输出是 GBK：先试 UTF-8，失败再用 GBK。"""
+    for encoding in ("utf-8", "gbk"):
         try:
-            result = subprocess.run(argv, shell=False, cwd=self.runtime_dir, env=env, capture_output=True,
-                                    timeout=timeout, check=False)
-            combined = result.stdout + ((b"\n" if result.stdout and result.stderr else b"") + result.stderr)
-            output, truncated = _bounded(combined)
-            status = "success" if result.returncode == 0 else "failed"
-            returncode = result.returncode
-        except subprocess.TimeoutExpired as exc:
-            combined = (exc.stdout or b"") + (exc.stderr or b"")
-            output, truncated = _bounded(combined)
-            output = (output + "\n[命令执行超时]").strip()
-            status, returncode = "timeout", None
-        except OSError as exc:
-            output, truncated, status, returncode = str(exc), False, "failed", None
-        duration = round(time.perf_counter() - started, 3)
-        parsed = parse_output(command.get("parser", "generic"), output, returncode if returncode is not None else 1)
-        return {"command_id": command["id"], "argv": argv, "display": shlex.join(argv),
-                "cmd": shlex.join(argv), "output": output, "status": status,
-                "returncode": returncode, "duration_s": duration, "duration": duration,
-                "required": bool(command.get("required", True)), "truncated": truncated, "parsed": parsed}
+            return data.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return data.decode("utf-8", errors="replace")
 
-    def execute(self, commands: list[dict], mode: str, emit: Callable[[str, dict], None] | None = None) -> list[dict]:
-        results = []
-        for index, command in enumerate(commands, 1):
-            try:
-                item = self.execute_one(command, mode)
-            except CommandRejected as exc:
-                item = {"command_id": str(command.get("id", "unknown")), "argv": command.get("argv"),
-                        "display": "", "cmd": "", "output": str(exc), "status": "rejected",
-                        "returncode": None, "duration_s": 0.0, "duration": 0.0,
-                        "required": bool(command.get("required", True)), "truncated": False, "parsed": {}}
-            results.append(item)
-            if emit:
-                emit("collect", {"index": index, **item})
-            if item["required"] and item["status"] != "success":
-                break
-        return results
+
+def _subprocess_runner(args: list[str], timeout: float) -> tuple[int, bytes]:
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    result = subprocess.run(args, shell=False, capture_output=True, timeout=timeout, creationflags=flags)
+    return result.returncode, result.stdout + result.stderr
+
+
+Runner = Callable[[list[str], float], tuple[int, bytes]]
+
+
+PLATFORM_TARGET = {"win32": "local", "darwin": "local_mac"}  # 本机命令按哪个平台的写法执行
+
+
+def local_target() -> str | None:
+    """当前系统对应的本机命令类型：Windows → local，macOS → local_mac，其他 → None。"""
+    return PLATFORM_TARGET.get(sys.platform)
+
+
+def live_supported(target: str | None = None) -> bool:
+    """这类命令在当前系统上是否真实执行（不传 target 时：本机命令是否真实执行）。
+
+    Windows 上执行 Windows 写法（local），macOS 上执行 macOS 写法（local_mac），交换机命令一律回放。
+    ENGINE_MODE=replay 强制全部回放（演示备用），ENGINE_MODE=live 强制真实执行。"""
+    mode = os.environ.get("ENGINE_MODE", "auto").lower()
+    if mode == "replay" or target == "switch":
+        return False
+    if mode == "live":
+        return True
+    return local_target() is not None and (target is None or target == local_target())
+
+
+def read_replay(path: Path) -> tuple[str, str, str]:
+    """读取回放文件，返回 (正文, 来源说明, 状态)。
+
+    文件开头以 `# ` 开头的行是说明：`# 来源：…` 写出处，`# status: failed` 指定执行状态（默认 success）。"""
+    notes, body, status = [], [], "success"
+    lines = path.read_text(encoding="utf-8").splitlines()
+    header = True
+    for line in lines:
+        if header and line.startswith("# "):
+            note = line[2:].strip()
+            if note.lower().startswith("status:"):
+                status = note.split(":", 1)[1].strip()
+            else:
+                notes.append(note)
+            continue
+        header = False
+        body.append(line)
+    return "\n".join(body).strip("\n"), "；".join(notes), status
+
+
+def execute(command: str, target: str = "local", timeout: float = DEFAULT_TIMEOUT,
+            replay: Path | None = None, runner: Runner | None = None, force_replay: bool = False) -> dict:
+    """执行一条命令，返回 {cmd, status, duration, output, raw, mode, replay_source}。
+
+    status：success / failed / timeout / rejected。
+    output：界面显示的内容（回放会在第一行标明「模拟回放」和来源）；raw：命令的原始输出，规则判定用它。
+    mode：live（真实执行）/ replay（读回放文件）/ rejected。
+    force_replay：这一次全部读回放（界面的「模拟」模式），不受 ENGINE_MODE 影响。"""
+    started = time.monotonic()
+    ok, reason = check(command, target)
+    if not ok:
+        return {"cmd": command, "status": "rejected", "duration": 0.0,
+                "output": f"{REJECTED_TEXT}（{reason}）", "raw": "", "mode": "rejected", "replay_source": None}
+
+    if force_replay or not live_supported(target):
+        if replay is None or not replay.exists():
+            return {"cmd": command, "status": "failed", "duration": 0.0,
+                    "output": "没有可用的回放数据（未连接真实设备）", "raw": "", "mode": "replay", "replay_source": None}
+        raw, source, status = read_replay(replay)
+        label = "【模拟回放" + (f" · {source}" if source else "") + "】"
+        return {"cmd": command, "status": status, "duration": round(time.monotonic() - started, 2),
+                "output": f"{label}\n{raw}", "raw": raw, "mode": "replay", "replay_source": source}
+
+    run = runner or _subprocess_runner
+    try:
+        code, data = run(shlex.split(command), timeout)
+        raw = _decode(data)
+        status = "success" if code == 0 else "failed"
+    except subprocess.TimeoutExpired as exc:
+        raw = _decode(exc.output or b"")
+        status = "timeout"
+    except OSError as exc:
+        raw = f"无法执行：{exc}"
+        status = "failed"
+    raw = raw.replace("\r\n", "\n").strip()
+    if len(raw.encode("utf-8")) > OUTPUT_LIMIT:
+        raw = raw.encode("utf-8")[:OUTPUT_LIMIT].decode("utf-8", errors="ignore") + "\n…（输出过长，已截断）"
+    output = raw if status != "timeout" else (raw + f"\n（超过 {timeout:g} 秒，已停止）").strip()
+    return {"cmd": command, "status": status, "duration": round(time.monotonic() - started, 2),
+            "output": output or "（无输出）", "raw": raw, "mode": "live", "replay_source": None}

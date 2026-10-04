@@ -1,50 +1,73 @@
-version: 1
+# 登录规则树：管理地址可达 → STelnet 开启 → SSH 源接口 → VTY 用户数
+start: mgmt
 rules:
-  - id: processes-readable
-    label: 进程列表可读取
-    when: {fact: commands.process-list.status, op: eq, value: success}
-    on_match:
-      branch: process-context
-      finding:
-        severity: ok
-        title: 已采集进程列表
-        symptom: "读取到 ${commands.process-list.parsed.line_count} 条进程记录"
-        root_cause: 该结果仅证明进程列表可读取
-        fix_commands: [结合目标服务名继续人工核对进程]
-        ref_ids: [process-read]
-  - id: sockets-readable
-    label: 端口状态可读取
-    when: {fact: commands.network-sockets.status, op: eq, value: success}
-    on_match:
-      branch: socket-context
-      finding:
-        severity: ok
-        title: 已采集网络连接和监听状态
-        symptom: 端口只读采集成功
-        root_cause: 尚需结合目标端口和服务日志确认故障
-        fix_commands: [核对目标服务端口是否处于监听状态]
-        ref_ids: [socket-read]
-  - id: load-readable
-    label: 系统负载可读取
-    when: {fact: commands.system-load.status, op: eq, value: success}
-    on_match:
-      branch: load-context
-      finding:
-        severity: ok
-        title: 已采集系统负载摘要
-        symptom: uptime 只读采集成功
-        root_cause: 负载摘要不能单独证明服务根因
-        fix_commands: [将负载信息与服务日志一并核对]
-        ref_ids: [load-read]
-  - id: nginx-failed
-    label: nginx 服务状态读取失败或服务异常
-    when: {fact: commands.nginx-status.status, op: ne, value: success}
-    on_match:
-      branch: service-unavailable
-      finding:
-        severity: warning
-        title: 未能确认 nginx 服务为正常状态
-        symptom: systemctl 状态检查未成功
-        root_cause: 可能是服务异常，也可能是目标系统不使用 systemd
-        fix_commands: [在 Linux systemd 目标上人工核对 nginx 状态和日志]
-        ref_ids: [service-read]
+  - id: mgmt
+    label: 管理地址 ${mgmt} 有回复
+    check: {cmd: ping-mgmt, regex: 'TTL='}
+    hit: {branch: 网络可达，继续检查 SSH 服务, finding: mgmt-ok, next: stelnet}
+    miss: {branch: 管理地址不可达, finding: mgmt-down, next: end}
+  - id: stelnet
+    label: STelnet IPv4 服务未开启
+    check: {cmd: ssh-status, regex: '^STELNET IPv4 server\s*:\s*Disable'}
+    hit: {branch: SSH 服务端没有开启 STelnet, finding: stelnet-off, next: source}
+    miss: {branch: STelnet 已开启, finding: stelnet-on, next: source}
+  - id: source
+    label: 没有指定 SSH 服务器源接口
+    check: {cmd: ssh-status, regex: '^SSH server source interface\s*:\s*$'}
+    hit: {branch: 源接口为空, finding: no-source, next: vty}
+    miss: {branch: 已指定源接口, next: vty}
+  - id: vty
+    label: VTY 用户数已达到缺省上限 5 个
+    check: {cmd: users, regex: '\bVTY 4\b'}
+    hit: {branch: VTY 通道已占满, finding: vty-full, next: end}
+    miss: {branch: VTY 通道未占满, finding: vty-ok, next: end}
+findings:
+  mgmt-down:
+    severity: critical
+    title: 交换机管理地址 ${mgmt} 不可达
+    symptom: ping ${mgmt} 没有收到回复。
+    root_cause: SSH 客户端到交换机的网络不通，先排查网络连通性。
+    fix_commands: [运行「网络连通排查」技能, display ip interface brief]
+    refs: [ssh-network]
+  mgmt-ok:
+    severity: ok
+    title: 管理地址可达
+    symptom: ping ${mgmt} 有回复。
+    root_cause: 排除网络不通导致的登录失败。
+    fix_commands: []
+    refs: [ssh-network]
+  stelnet-off:
+    severity: critical
+    title: 交换机没有开启 STelnet 服务
+    symptom: display ssh server status 显示 STELNET IPv4 server 为 Disable。
+    root_cause: SSH 服务端没有使能 STelnet，SSH 客户端无法登录。
+    fix_commands: [system-view, stelnet ipv4 server enable, display ssh server status]
+    refs: [ssh-config]
+  stelnet-on:
+    severity: ok
+    title: STelnet 服务已开启
+    symptom: display ssh server status 显示 STELNET IPv4 server 为 Enable。
+    root_cause: 排除服务未开启的问题。
+    fix_commands: []
+    refs: [ssh-config]
+  no-source:
+    severity: warning
+    title: 没有指定 SSH 服务器源接口
+    symptom: display ssh server status 中 SSH server source interface 为空。
+    root_cause: 没有指定源接口时，从部分接口发起的 SSH 登录可能失败。
+    fix_commands: [system-view, ssh server-source -i vlanif <管理 VLAN>]
+    refs: [ssh-config]
+  vty-full:
+    severity: warning
+    title: VTY 用户数已满
+    symptom: display users 显示 VTY 0~4 均被占用。
+    root_cause: 缺省最多 5 个 VTY 用户，新用户无法登录。
+    fix_commands: [display user-interface maximum-vty, user-interface maximum-vty 15]
+    refs: [ssh-config]
+  vty-ok:
+    severity: ok
+    title: VTY 用户数未满
+    symptom: display users 显示仍有空闲的 VTY 通道。
+    root_cause: 排除 VTY 通道占满导致的登录失败。
+    fix_commands: []
+    refs: [ssh-config]

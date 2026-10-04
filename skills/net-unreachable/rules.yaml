@@ -1,47 +1,101 @@
-version: 1
+# 网络连通规则树：本机地址 → 网关 → 目标 → 交换机端口物理状态 → 端口 VLAN
+start: local-ip
 rules:
-  - id: target-unreachable
-    label: 目标地址 100% 丢包
-    when: {fact: commands.target-ping.parsed.loss_pct, op: gte, value: 100}
-    on_match:
-      branch: target-unreachable
-      finding:
-        severity: critical
-        title: 目标地址不可达
-        symptom: "预置测试目标丢包率为 ${commands.target-ping.parsed.loss_pct}%"
-        root_cause: 网络路径或目标端状态仍需结合设备侧接口信息定位
-        fix_commands: [检查链路两端线缆和接口状态, 将线缆接入其他空闲接口进行对比验证]
-        ref_ids: [physical-down]
-  - id: local-stack-ok
-    label: 本机回环可达
-    when: {fact: commands.loopback-ping.parsed.reachable, op: eq, value: true}
-    on_match:
-      branch: local-stack-ok
-      finding:
-        severity: ok
-        title: 本机基础网络栈响应正常
-        symptom: 回环地址连通检查成功
-        root_cause: 当前未发现本机回环通信异常
-        fix_commands: [继续检查物理链路和交换机接口状态]
-        ref_ids: [connectivity-check]
-  - id: route-readable
-    label: 路由表可读取
-    when: {fact: commands.route-table.status, op: eq, value: success}
-    on_match:
-      branch: route-collected
-      finding:
-        severity: ok
-        title: 已采集本机路由信息
-        symptom: 路由表只读采集成功
-        root_cause: 路由信息可用于后续人工核对，当前不据此单独判定根因
-        fix_commands: [核对默认网关和目标网段路由]
-        ref_ids: [connectivity-check]
-  - id: device-output-present
-    label: 已取得交换机接口实时输出
-    when: {fact: commands.switch-interface.status, op: exists, value: true}
-    on_miss:
-      branch: ai-evidence-required
-ai:
-  enabled: true
-  trigger: on_unmatched
-  query: "S系列交换机接口物理DOWN故障排除"
+  - id: local-ip
+    label: 本机已获取 IPv4 地址
+    check: {cmd: ipconfig, regex: '(?:IPv4[^:\n]*:\s*|^\s*inet\s+(?!127\.))(?P<local_ip>\d+\.\d+\.\d+\.\d+)'}  # Windows: IPv4 地址 … : x；macOS: inet x（跳过 127.0.0.1）
+    hit: {branch: '本机地址正常（${local_ip}）', finding: local-ip-ok, next: gateway}
+    miss: {branch: 本机没有地址, finding: no-ip, next: end}
+  - id: gateway
+    label: 网关 ${gateway} 有回复
+    check: {cmd: ping-gateway, regex: 'TTL='}
+    hit: {branch: 本机到网关链路正常, finding: gateway-ok, next: target}
+    miss: {branch: 网关不可达，问题在本机到网关之间, finding: gateway-down, next: end}
+  - id: target
+    label: 目标 ${target} 没有回复
+    # Windows 上网关代回「无法访问目标主机」时丢包率显示 0%，所以以「有没有带 TTL= 的回复」为准
+    check: {cmd: ping-target, not_regex: 'TTL='}
+    hit: {branch: 目标不可达，继续检查交换机端口, next: port-phy}
+    miss: {branch: 目标可达, finding: target-ok, next: end}
+  - id: port-phy
+    label: 交换机端口 ${port} 物理状态为 down
+    check: {cmd: if-brief, regex: '^${port}\s+(?P<phy>[*^~#]?down)\b'}
+    hit: {branch: 端口物理层故障, finding: port-down, next: end}
+    miss: {branch: 端口物理状态 up，继续检查 VLAN, finding: port-up, next: vlan}
+  - id: vlan
+    label: 端口 ${port} 的 PVID 不是业务 VLAN ${vlan}
+    check: {cmd: port-vlan, extract: '^${port}\s+(?P<link>\w+)\s+(?P<pvid>\d+)', op: '!=', value: '${vlan}'}
+    hit: {branch: '端口 VLAN 划分错误（PVID ${pvid}）', finding: vlan-wrong, next: end}
+    miss: {branch: 端口 VLAN 正确, finding: vlan-ok, next: end}
+findings:
+  no-ip:
+    severity: critical
+    title: 本机没有获取到 IPv4 地址
+    symptom: ipconfig 中没有 IPv4 地址。
+    root_cause: 本机网卡未连接、未配置静态地址或 DHCP 获取失败。
+    fix_commands: [检查网线和网卡状态, ipconfig /all]
+    refs: []
+  local-ip-ok:
+    severity: ok
+    title: 本机地址正常
+    symptom: 本机 IPv4 地址为 ${local_ip}。
+    root_cause: 未发现本机地址问题。
+    fix_commands: []
+    refs: []
+  gateway-down:
+    severity: critical
+    title: 网关 ${gateway} 不可达
+    symptom: ping ${gateway} 没有收到回复。
+    root_cause: 本机到网关之间的链路、VLAN 或网关配置异常。
+    fix_commands: [display port vlan, display interface brief, display arp]
+    refs: [ping]
+  gateway-ok:
+    severity: ok
+    title: 本机到网关链路正常
+    symptom: 网关 ${gateway} 有回复。
+    root_cause: 未发现本机到网关的链路问题。
+    fix_commands: []
+    refs: [ping]
+  target-ok:
+    severity: ok
+    title: 目标 ${target} 可达
+    symptom: ping ${target} 收到回复。
+    root_cause: 当前网络连通正常，可能是间歇性故障或应用层问题。
+    fix_commands: []
+    refs: [ping]
+  port-down:
+    severity: critical
+    title: 交换机端口 ${port} 物理 down
+    symptom: 目标 ${target} 无回复、网关可达；display interface brief 显示 ${port} 的 PHY 为 ${phy}。
+    root_cause: 端口物理层故障：线缆或光模块问题、对端设备异常，或端口被人为 shutdown。
+    fix_commands:
+      - display interface ${port}
+      - 若 current state 为 Administratively down，进入接口视图执行 undo shutdown
+      - 若为 DOWN，检查线缆、光模块，以及两端速率、双工、自协商是否一致
+    refs: [port-down]
+  port-up:
+    severity: ok
+    title: 交换机端口 ${port} 物理状态正常
+    symptom: display interface brief 显示 ${port} 的 PHY 为 up。
+    root_cause: 排除端口物理层故障。
+    fix_commands: []
+    refs: [port-down]
+  vlan-wrong:
+    severity: critical
+    title: 端口 ${port} 的 VLAN 划分错误
+    symptom: 目标 ${target} 无回复、网关可达、端口 up；display port vlan 显示 ${port} 为 ${link}，PVID ${pvid}，应为 VLAN ${vlan}。
+    root_cause: 端口没有加入业务 VLAN ${vlan}，目标服务器与网关不在同一 VLAN。
+    fix_commands:
+      - system-view
+      - interface ${port}
+      - port link-type access
+      - port default vlan ${vlan}
+      - display port vlan ${port}
+    refs: [vlan]
+  vlan-ok:
+    severity: warning
+    title: 端口和 VLAN 均正常，但目标仍不可达
+    symptom: 端口 ${port} 为 up，PVID 为 ${pvid}，与业务 VLAN 一致。
+    root_cause: 问题可能在目标服务器本身（网卡、防火墙）或更上层的配置。
+    fix_commands: [display arp, display mac-address]
+    refs: [ping]

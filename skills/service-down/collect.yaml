@@ -1,26 +1,18 @@
-version: 1
+platform: windows                # 演示平台；本机命令同时写了 macOS 版本（开发机上也能真实执行）
+timeout: 10
+vars:
+  mgmt:                          # 交换机管理地址：默认取本机默认网关，可用 OPS_MGMT 修改
+    from: ipconfig
+    regex: '(?:默认网关|Default Gateway)[ .]*:\s*(?:[0-9A-Fa-f:]+%\d+\s+)?(\d+\.\d+\.\d+\.\d+)|^default\s+(\d+\.\d+\.\d+\.\d+)'
+    default: 192.168.10.1
 commands:
-  - id: process-list
-    argv: [ps, -axo, "pid,comm"]
-    timeout_s: 5
-    required: true
-    parser: line_count
-    simulation: {status: success, returncode: 0, duration_s: 0.03, output: "PID COMMAND\n1 init\n22 nginx"}
-  - id: network-sockets
-    argv: [netstat, -an]
-    timeout_s: 5
-    required: false
-    parser: line_count
-    simulation: {status: success, returncode: 0, duration_s: 0.03, output: "Active Internet connections\ntcp 0 0 0.0.0.0:80 LISTEN"}
-  - id: system-load
-    argv: [uptime]
-    timeout_s: 3
-    required: false
-    parser: generic
-    simulation: {status: success, returncode: 0, duration_s: 0.01, output: "up 10 days, load average: 0.10, 0.12, 0.09"}
-  - id: nginx-status
-    argv: [systemctl, status, nginx]
-    timeout_s: 5
-    required: false
-    parser: generic
-    simulation: {status: failed, returncode: 3, duration_s: 0.02, output: "nginx.service: failed"}
+  - id: ipconfig
+    run: {windows: ipconfig, mac: netstat -rn}
+  - id: ping-mgmt
+    run: {windows: 'ping -n 2 -w 1000 ${mgmt}', mac: 'ping -c 2 -t 2 ${mgmt}'}
+  - id: ssh-status
+    run: display ssh server status
+    target: switch
+  - id: users
+    run: display users
+    target: switch

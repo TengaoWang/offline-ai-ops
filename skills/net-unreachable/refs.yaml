@@ -1,8 +1,11 @@
-version: 1
+# 每条结论对应的手册章节号。只写章节号，页码和标题由 llm.cite() 从手册索引里查。
 refs:
-  - id: physical-down
-    resolver: rag
-    query: "接口物理DOWN故障的原因以及故障恢复方法"
-  - id: connectivity-check
-    resolver: rag
-    query: "检查接口物理状态是否为Down 线缆 空闲接口"
+  ping:
+    sections: ["15.2"]
+    query: Ping 不通故障定位
+  port-down:
+    sections: ["8.2"]
+    query: 接口物理 DOWN 故障定位
+  vlan:
+    sections: ["22.53.3.2", "15.2.2"]
+    query: 接口加入 VLAN access 缺省 VLAN

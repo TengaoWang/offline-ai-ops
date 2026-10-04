@@ -1,32 +1,11 @@
-version: 1
+platform: switch
+timeout: 10
+vars:
+  threshold: 90                  # Flash 使用率超过多少算空间不足（%）
 commands:
-  - id: disk-usage
-    argv: [df, -P]
-    timeout_s: 5
-    required: true
-    parser: df_posix
-    simulation:
-      status: success
-      returncode: 0
-      duration_s: 0.02
-      output: "Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/test 100000 95000 5000 95% /var"
-  - id: temp-size
-    argv: [du, -sk, /tmp]
-    timeout_s: 10
-    required: false
-    parser: generic
-    simulation:
-      status: success
-      returncode: 0
-      duration_s: 0.04
-      output: "2048 /tmp"
-  - id: host-info
-    argv: [uname, -a]
-    timeout_s: 3
-    required: false
-    parser: generic
-    simulation:
-      status: success
-      returncode: 0
-      duration_s: 0.01
-      output: "Linux test-host 6.1 x86_64"
+  - id: dir-all
+    run: 'dir /all flash:'
+    target: switch
+  - id: startup
+    run: display startup
+    target: switch
