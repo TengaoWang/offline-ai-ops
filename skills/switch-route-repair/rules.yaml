@@ -1,0 +1,22 @@
+start: repaired
+rules:
+  - id: repaired
+    label: 路由修复后全路径复检通过
+    check: {cmd: apply-route-repair, regex: '"repaired"\s*:\s*true'}
+    hit: {branch: 路由已修复, finding: repaired, next: end}
+    miss: {branch: 当前场景不适用或复检失败, finding: not-repaired, next: end}
+findings:
+  repaired:
+    severity: ok
+    title: 故障已解决：去程和回程路由修复完成
+    symptom: 助手执行受控路由配置后，端到端复检通过。
+    root_cause: SW2 缺失路由及 SW3 错误回程下一跳均已修正。
+    fix_commands: [自动执行记录已显示在采集过程]
+    refs: [route]
+  not-repaired:
+    severity: warning
+    title: 路由修复技能未执行或复检未通过
+    symptom: 当前场景不是 C，或者自动修复后仍存在故障。
+    root_cause: 需要重新选择场景 C 并先完成一键体检。
+    fix_commands: [重新选择场景 C]
+    refs: [route]

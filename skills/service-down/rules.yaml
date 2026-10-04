@@ -1,0 +1,73 @@
+# 登录规则树：管理地址可达 → STelnet 开启 → SSH 源接口 → VTY 用户数
+start: mgmt
+rules:
+  - id: mgmt
+    label: 管理地址 ${mgmt} 有回复
+    check: {cmd: ping-mgmt, regex: 'TTL='}
+    hit: {branch: 网络可达，继续检查 SSH 服务, finding: mgmt-ok, next: stelnet}
+    miss: {branch: 管理地址不可达, finding: mgmt-down, next: end}
+  - id: stelnet
+    label: STelnet IPv4 服务未开启
+    check: {cmd: ssh-status, regex: '^STELNET IPv4 server\s*:\s*Disable'}
+    hit: {branch: SSH 服务端没有开启 STelnet, finding: stelnet-off, next: source}
+    miss: {branch: STelnet 已开启, finding: stelnet-on, next: source}
+  - id: source
+    label: 没有指定 SSH 服务器源接口
+    check: {cmd: ssh-status, regex: '^SSH server source interface\s*:\s*$'}
+    hit: {branch: 源接口为空, finding: no-source, next: vty}
+    miss: {branch: 已指定源接口, next: vty}
+  - id: vty
+    label: VTY 用户数已达到缺省上限 5 个
+    check: {cmd: users, regex: '\bVTY 4\b'}
+    hit: {branch: VTY 通道已占满, finding: vty-full, next: end}
+    miss: {branch: VTY 通道未占满, finding: vty-ok, next: end}
+findings:
+  mgmt-down:
+    severity: critical
+    title: 交换机管理地址 ${mgmt} 不可达
+    symptom: ping ${mgmt} 没有收到回复。
+    root_cause: SSH 客户端到交换机的网络不通，先排查网络连通性。
+    fix_commands: [运行「网络连通排查」技能, display ip interface brief]
+    refs: [ssh-network]
+  mgmt-ok:
+    severity: ok
+    title: 管理地址可达
+    symptom: ping ${mgmt} 有回复。
+    root_cause: 排除网络不通导致的登录失败。
+    fix_commands: []
+    refs: [ssh-network]
+  stelnet-off:
+    severity: critical
+    title: 交换机没有开启 STelnet 服务
+    symptom: display ssh server status 显示 STELNET IPv4 server 为 Disable。
+    root_cause: SSH 服务端没有使能 STelnet，SSH 客户端无法登录。
+    fix_commands: [system-view, stelnet ipv4 server enable, display ssh server status]
+    refs: [ssh-config]
+  stelnet-on:
+    severity: ok
+    title: STelnet 服务已开启
+    symptom: display ssh server status 显示 STELNET IPv4 server 为 Enable。
+    root_cause: 排除服务未开启的问题。
+    fix_commands: []
+    refs: [ssh-config]
+  no-source:
+    severity: warning
+    title: 没有指定 SSH 服务器源接口
+    symptom: display ssh server status 中 SSH server source interface 为空。
+    root_cause: 没有指定源接口时，从部分接口发起的 SSH 登录可能失败。
+    fix_commands: [system-view, ssh server-source -i vlanif <管理 VLAN>]
+    refs: [ssh-config]
+  vty-full:
+    severity: warning
+    title: VTY 用户数已满
+    symptom: display users 显示 VTY 0~4 均被占用。
+    root_cause: 缺省最多 5 个 VTY 用户，新用户无法登录。
+    fix_commands: [display user-interface maximum-vty, user-interface maximum-vty 15]
+    refs: [ssh-config]
+  vty-ok:
+    severity: ok
+    title: VTY 用户数未满
+    symptom: display users 显示仍有空闲的 VTY 通道。
+    root_cause: 排除 VTY 通道占满导致的登录失败。
+    fix_commands: []
+    refs: [ssh-config]

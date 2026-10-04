@@ -1,0 +1,11 @@
+targets: [simulator]
+timeout: 10
+commands:
+  - id: initial-probe
+    target: simulator
+    action: probe
+    run: probe
+  - id: scene-diagnosis
+    target: simulator
+    action: diagnose
+    run: diagnose

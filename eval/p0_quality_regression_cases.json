@@ -1,0 +1,7 @@
+{
+  "answerable": [
+    {"id": "r01", "question": "S5700 忘记命令行登录密码，但还能通过 Console 连接，手册给出的恢复方向是什么？", "expect_any": ["密码", "口令", "BootROM", "Console", "清除"]}
+  ],
+  "unanswerable": [],
+  "multi_turn": []
+}

@@ -1,0 +1,10 @@
+{
+  "switch": {"name": "OPS-SW1", "host": "127.0.0.1", "port": 2000},
+  "probe": {"name": "OPS-PROBE", "host": "127.0.0.1", "port": 2001},
+  "interface": "GigabitEthernet0/0/1",
+  "destination": "192.168.10.1",
+  "source": "192.168.10.2",
+  "expected_enabled": true,
+  "timeout": 12,
+  "encoding": "utf-8"
+}

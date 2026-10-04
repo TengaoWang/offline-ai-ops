@@ -1,0 +1,7 @@
+refs:
+  ssh-network:
+    sections: ["19.3.2"]
+    query: SSH 客户端到服务端网络是否通畅
+  ssh-config:
+    sections: ["19.3.4"]
+    query: 检查 SSH 客户端和服务端配置 STelnet 使能

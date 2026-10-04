@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f6f7f8">
+    <title>离线 AI 运维助手</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <section class="direct-open-notice" id="directOpenNotice" role="alert" hidden>
+      <div>
+        <strong>请通过本机服务打开此页面</strong>
+        <p>当前是直接打开的静态文件，无法连接知识库、模型和诊断接口。请先在项目目录启动服务，再访问下方地址。</p>
+        <code>.venv/bin/python -m ui.server --host 127.0.0.1 --port 8765</code>
+      </div>
+      <a href="http://127.0.0.1:8765/">打开 http://127.0.0.1:8765</a>
+    </section>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="主导航">
+        <a class="brand" href="#chat" aria-label="离线 AI 运维助手首页">
+          <span class="brand-mark" aria-hidden="true">OA</span>
+          <span class="brand-copy"><strong>离线运维助手</strong><small>OFFLINE AI OPS</small></span>
+        </a>
+
+        <div class="workspace-switcher">
+          <span class="workspace-avatar">O</span>
+          <span><strong>本地工作区</strong><small>数据仅保存在此设备</small></span>
+          <span class="chevron" aria-hidden="true">⌄</span>
+        </div>
+
+        <button class="new-chat-button" id="newChatBtn" type="button"><span aria-hidden="true">＋</span>新建排障会话</button>
+
+        <nav class="nav-list" aria-label="工作台">
+          <button class="nav-item active" id="navChat" type="button" data-view="chat"><span class="nav-glyph" aria-hidden="true">◉</span><span>诊断对话</span></button>
+          <button class="nav-item" id="navQA" type="button" data-view="qa"><span class="nav-glyph" aria-hidden="true">⌕</span><span>知识问答</span></button>
+          <button class="nav-item" id="navManuals" type="button" data-view="manuals"><span class="nav-glyph" aria-hidden="true">▤</span><span>手册与索引</span></button>
+          <button class="nav-item" id="navMemory" type="button" data-view="memory"><span class="nav-glyph" aria-hidden="true">◇</span><span>长期记忆</span></button>
+          <button class="nav-item" id="navEvidence" type="button" data-view="evidence"><span class="nav-glyph" aria-hidden="true">▥</span><span>Evidence 对比</span></button>
+        </nav>
+
+        <div class="sidebar-section-label conversation-section-heading"><span>最近对话</span><span class="conversation-count" id="conversationCount">0</span></div>
+        <div class="conversation-list" id="conversationList" aria-label="最近对话"></div>
+
+        <div class="sidebar-section-label">演示场景</div>
+        <button class="recent-item" type="button" data-prompt="MES 服务器业务网不通，管理口还能 ping 通"><span class="recent-mark network"></span><span>生产网中断</span></button>
+        <button class="recent-item" type="button" data-prompt="交换机 Flash 存储空间不足，升级提示空间不够"><span class="recent-mark disk"></span><span>交换机存储告警</span></button>
+        <button class="recent-item" type="button" data-prompt="交换机 SSH 一直登不上，请排查"><span class="recent-mark service"></span><span>交换机登录失败</span></button>
+
+        <div class="sidebar-spacer"></div>
+        <button class="nav-item system-nav" id="navStatus" type="button" data-view="status"><span class="nav-glyph" aria-hidden="true">⚙</span><span>系统状态</span><span class="nav-status-dot" id="navStatusDot"></span></button>
+        <div class="sidebar-health" id="sidebarHealth" aria-live="polite">
+          <span class="health-dot"></span>
+          <span><strong>正在检查本机状态</strong><small>仅连接 127.0.0.1</small></span>
+        </div>
+        <div class="sidebar-footnote" id="sidebarFootnote">离线优先 · 不向外部发送数据</div>
+      </aside>
+
+      <main class="main-area">
+        <header class="topbar">
+          <div class="topbar-title">
+            <span class="crumb-muted">工作区</span><span class="crumb-separator">/</span><strong id="topbarPageTitle">诊断对话</strong>
+          </div>
+          <div class="topbar-actions">
+            <button class="icon-button mobile-conversations-button" id="mobileConversationsBtn" type="button" aria-label="打开对话列表" title="对话列表">☰</button>
+            <span class="local-badge"><span class="health-dot"></span>本地运行</span>
+            <div class="status-strip" id="statusStrip" aria-live="polite"></div>
+            <span class="refresh-feedback" id="refreshFeedback" aria-live="polite"></span>
+            <button class="icon-button" id="refreshStatusBtn" type="button" aria-label="刷新系统状态" title="刷新系统状态">↻</button>
+            <button class="language-toggle" id="languageToggle" type="button" aria-label="Switch to English" title="Switch to English">EN</button>
+          </div>
+        </header>
+
+        <section class="page-view chat-view active" id="chatView" aria-label="诊断对话">
+          <div class="chat-layout">
+            <section class="chat-column" aria-label="对话内容">
+              <div class="thread-heading">
+                <div>
+                  <p class="eyebrow">本地 Agent 工作台</p>
+                  <h1 id="threadTitle">新的排障会话</h1>
+                </div>
+                <span class="thread-privacy"><span aria-hidden="true">⌂</span> 私有会话</span>
+              </div>
+
+              <div class="chat-feed" id="chatFeed" aria-live="polite" aria-relevant="additions">
+                <article class="message assistant-message welcome-message">
+                  <div class="message-avatar assistant-avatar" aria-hidden="true">AI</div>
+                  <div class="message-body">
+                    <div class="message-meta"><strong>离线运维 Agent</strong><span>本机知识库与技能库</span></div>
+                    <div class="message-content">
+                      <p>你好，我可以查询本机设备手册，也可以运行经过校验的只读排障技能。</p>
+                      <p class="welcome-note">所有处理都在本机完成。修复指令只展示，绝不会自动执行。</p>
+                      <div class="suggestion-heading">点击示例填入问题，可修改后查询</div>
+                      <p class="demo-source-note">请选择“手册问答”或“故障诊断”。诊断模式会执行所选模式对应的白名单只读采集。</p>
+                      <div class="suggestion-list">
+                        <button type="button" class="suggestion-chip" data-prompt="MES 服务器业务网不通，管理口还能 ping 通" data-prompt-en="The MES business network is unreachable, but the management interface can still ping.">MES 业务网不通，管理口正常</button>
+                        <button type="button" class="suggestion-chip" data-prompt="交换机 Flash 存储空间不足，升级提示空间不够" data-prompt-en="The switch reports insufficient Flash space during an upgrade.">交换机存储空间告警</button>
+                        <button type="button" class="suggestion-chip" data-prompt="交换机 SSH 一直登不上，请排查" data-prompt-en="SSH login to the switch keeps failing; please diagnose it.">交换机 SSH 登录失败</button>
+                      </div>
+                    </div>
+                  </div>
+                </article>
+              </div>
+
+              <form class="composer" id="composerForm">
+                <div class="composer-skill-row">
+                  <label class="composer-skill-label" for="interactionMode">处理方式</label>
+                  <select id="interactionMode" class="mode-select"><option value="ask">手册问答</option><option value="diagnose">故障诊断</option></select>
+                  <label class="composer-skill-label" for="executionMode">诊断执行</label>
+                  <select id="executionMode" class="mode-select"><option value="real">本机只读执行</option><option value="simulation">模拟器固定输出</option></select>
+                  <button class="selected-skill-pill" id="skillPickerBtn" type="button" aria-haspopup="dialog" aria-controls="skillPickerDialog"><span id="activeSkillLabel">正在加载技能库…</span><span aria-hidden="true">⌄</span></button>
+                  <span class="composer-local-note"><span class="tiny-lock" aria-hidden="true">⌂</span> 本地处理</span>
+                </div>
+                <label class="sr-only" for="faultText">询问本地手册</label>
+                <textarea id="faultText" rows="2" placeholder="询问设备配置、状态检查或排障步骤；可继续追问上文" required></textarea>
+                <div class="composer-bottom">
+                  <span class="composer-hint" id="composerModeHint">手册问答使用本地 RAG；故障诊断只执行技能包内通过白名单的只读命令。</span>
+                  <div class="composer-actions">
+                    <button class="quick-checkup-button" id="quickCheckupBtn" type="button" title="直接运行当前选中的真实技能，不需要输入故障描述">一键体检</button>
+                    <button class="send-button" id="sendBtn" type="submit" title="查询本地手册并核验出处"><span>查询手册</span><span aria-hidden="true">↑</span></button>
+                  </div>
+                </div>
+              </form>
+              <p class="composer-disclaimer">答案逐条核验手册出处 · 无足够依据时明确拒答</p>
+            </section>
+
+            <aside class="context-rail" aria-label="排查上下文">
+              <section class="rail-section run-overview">
+                <div class="rail-heading"><h2>问答流程</h2><span class="rail-state" id="runState">等待开始</span></div>
+                <ol class="step-list" id="stepList">
+                  <li class="step-item" data-step="1"><span class="step-number">1</span><span><strong>理解问题</strong><small>补全必要的追问对象</small></span></li>
+                  <li class="step-item" data-step="2"><span class="step-number">2</span><span><strong>检索手册</strong><small>本机关键词与向量检索</small></span></li>
+                  <li class="step-item" data-step="3"><span class="step-number">3</span><span><strong>核验结论</strong><small>逐条绑定原文证据</small></span></li>
+                  <li class="step-item" data-step="4"><span class="step-number">4</span><span><strong>展示回答</strong><small>答案、章节与页码</small></span></li>
+                </ol>
+              </section>
+
+              <section class="rail-section skills-section">
+                <div class="rail-heading"><h2>技能库</h2><button class="text-button" id="refreshSkillsBtn" type="button">刷新</button></div>
+                <p class="rail-description">合法技能可进行本机只读执行或明确标识的模拟运行；无效技能不可执行。</p>
+                <label class="sr-only" for="skillSearchInput">搜索技能名称或描述</label>
+                <input class="skill-search" id="skillSearchInput" type="search" placeholder="搜索技能名称或描述" autocomplete="off">
+                <button class="skill-auto-select" id="autoSkillSelect" type="button">自动匹配（不指定技能）</button>
+                <div class="skill-list" id="skillGrid" aria-live="polite"></div>
+                <p class="skill-selection-note" id="skillSelectionNote">诊断模式下可由后端匹配技能，也可手动选择。</p>
+              </section>
+
+              <section class="rail-section source-shelf-section">
+                <div class="rail-heading"><h2>会话出处</h2><span class="source-count" id="sourceCount">0</span></div>
+                <div class="source-shelf" id="sourceShelf"><p class="rail-empty">问答后显示经核验的手册出处。</p></div>
+              </section>
+
+              <div class="safety-rail-note"><span class="safety-symbol" aria-hidden="true">!</span><span><strong>安全边界</strong><small>写操作仅建议，不自动执行</small></span></div>
+            </aside>
+          </div>
+        </section>
+
+        <section class="page-view secondary-view" id="qaView" aria-labelledby="qaTitle" hidden>
+          <div class="subpage-heading"><div><p class="eyebrow">手册检索</p><h1 id="qaTitle">知识问答</h1><p>从已建索引的本地手册检索答案，并展示真实出处。</p></div><span class="view-mark">⌕</span></div>
+          <form class="qa-form" id="qaForm"><label for="qaQuestion">你想查询什么？</label><textarea id="qaQuestion" rows="3" placeholder="例如：S5700 上怎么把 GE0/0/1 配成 trunk 口？" required></textarea><div class="form-actions"><span>无检索依据时会明确告知，不会生成出处。</span><button class="primary-button" id="askBtn" type="submit">查询本地手册 <span aria-hidden="true">↑</span></button></div></form>
+          <div class="qa-result" id="qaResult" aria-live="polite"><div class="empty-card"><strong>等待查询</strong><p>答案会附带手册文件名、章节、页码和原文片段。</p></div></div>
+        </section>
+
+        <section class="page-view secondary-view" id="manualsView" aria-labelledby="manualsTitle" hidden>
+          <div class="subpage-heading"><div><p class="eyebrow">本地知识库</p><h1 id="manualsTitle">手册与索引</h1><p>导入设备手册并重建本地索引，文件不会离开这台设备。</p></div><span class="view-mark">▤</span></div>
+          <div class="manual-summary" id="manualSummary"></div>
+          <div class="manual-layout">
+            <div class="drop-zone" id="dropZone">
+              <input id="manualFile" type="file" accept=".pdf,.md,.txt" hidden>
+              <span class="upload-symbol" aria-hidden="true">↑</span><strong>拖入设备手册，或从本机选择</strong><span>支持 PDF、Markdown、TXT。文件先进入暂存区，索引验证成功后与手册清单一起发布。</span>
+              <button class="secondary-button" id="selectManualBtn" type="button">选择文件</button>
+            </div>
+            <div class="manual-actions"><div><strong>构建并发布知识库</strong><p>构建期间暂停问答；失败时保留当前可用版本。</p></div><button class="primary-button" id="rebuildIndexBtn" type="button">构建并发布 <span aria-hidden="true">↻</span></button></div>
+          </div>
+          <p class="inline-message" id="manualResult" aria-live="polite"></p>
+          <div class="sample-section"><div class="section-title-row"><div><h2>解析样例</h2><p>抽样展示文件、章节、页码和原文片段</p></div><span class="sample-count" id="sampleCount">0 条</span></div><div class="sample-list" id="sampleList"></div></div>
+        </section>
+
+        <section class="page-view secondary-view" id="memoryView" aria-labelledby="memoryTitle" hidden>
+          <div class="subpage-heading"><div><p class="eyebrow">本机经验库</p><h1 id="memoryTitle">长期记忆</h1><p>查看 Agent 记住的现场信息和历史排障记录；所有内容只保存在本机。</p></div><span class="view-mark">◇</span></div>
+          <div class="memory-summary" id="memorySummary">正在读取本机记忆…</div>
+          <div class="memory-list" id="memoryList" aria-live="polite"></div>
+        </section>
+
+        <section class="page-view secondary-view" id="evidenceView" aria-labelledby="evidenceTitle" hidden>
+          <div class="subpage-heading"><div><p class="eyebrow">答辩数据</p><h1 id="evidenceTitle">Evidence 对比</h1><p>记录同一场景下的手动排障与 AI 排障数据。</p></div><span class="view-mark">▥</span></div>
+          <div class="evidence-layout">
+            <section class="evidence-card">
+              <div class="section-title-row"><div><h2>手动排障记录</h2><p>根据需求文档的现场演示基线，可按实际情况调整。</p></div><span class="manual-tag">现场记录</span></div>
+              <div class="evidence-fields">
+                <label class="field"><span>耗时（分钟）</span><input id="manualMinutes" type="number" min="0" value="0"></label>
+                <label class="field"><span>步骤数</span><input id="manualSteps" type="number" min="0" value="0"></label>
+                <label class="field"><span>翻手册次数</span><input id="manualLookups" type="number" min="0" value="0"></label>
+                <label class="field field-wide"><span>备注</span><input id="manualNotes" type="text" value="请填写真实现场记录" data-i18n-value-zh="请填写真实现场记录" data-i18n-value-en="Enter actual field notes"></label>
+              </div>
+            </section>
+            <section class="evidence-card ai-evidence-card"><div class="section-title-row"><div><h2>AI 排障记录</h2><p>从最近一次诊断结果自动读取。</p></div><span class="ai-tag">自动填充</span></div><div class="ai-metrics" id="aiMetrics"><div><strong>—</strong><span>耗时</span></div><div><strong>—</strong><span>采集命令</span></div><div><strong>—</strong><span>报告条目</span></div><div><strong>—</strong><span>手册出处</span></div></div></section>
+          </div>
+          <div class="evidence-output-heading"><div><h2>对比表</h2><p>报告数据来自当前浏览器中的本地诊断会话。</p></div><div class="button-row"><button class="secondary-button" id="copyEvidenceBtn" type="button">复制 Markdown</button><button class="primary-button" id="generateEvidenceBtn" type="button">生成对比表</button></div></div>
+          <textarea id="evidenceOutput" class="evidence-output" spellcheck="false" aria-label="Evidence Markdown 对比表"></textarea>
+          <button class="download-link" id="downloadEvidenceBtn" type="button">导出为 Markdown 文件 ↓</button>
+        </section>
+
+        <section class="page-view secondary-view" id="statusView" aria-labelledby="statusTitle" hidden>
+          <div class="subpage-heading"><div><p class="eyebrow">运行环境</p><h1 id="statusTitle">系统状态</h1><p>检查本地模型服务、模型文件、手册索引和技能库。</p></div><span class="view-mark">⚙</span></div>
+          <div class="status-summary-card" id="statusSummaryCard"></div>
+          <div class="status-table" id="statusTable"></div>
+          <section class="simulator-card" aria-labelledby="simulatorTitle">
+            <div class="section-title-row"><div><h2 id="simulatorTitle">交换机测试模拟器</h2><p>命令提交到本机后端白名单校验，通过后仅返回固定样例，不连接真实设备。</p></div><span class="simulator-tag">后端白名单 · 本地模拟</span></div>
+            <form class="simulator-form" id="simulatorForm"><label for="simulatorCommand">输入模拟命令</label><div class="simulator-command-row"><input id="simulatorCommand" type="text" value="display interface brief" autocomplete="off" spellcheck="false"><button class="primary-button" type="submit">运行模拟</button></div></form>
+            <div class="simulator-examples" aria-label="模拟命令示例"><button type="button" data-sim-command="display version">display version</button><button type="button" data-sim-command="display interface brief">display interface brief</button><button type="button" data-sim-command="ping 1.1.1.1; rm -rf /">注入拦截示例</button></div>
+            <div class="simulator-output" id="simulatorOutput" role="status" aria-live="polite"><strong>等待输入</strong><p>运行模拟命令后，结果会显示在此区域。</p></div>
+          </section>
+          <div class="offline-info packaging-status"><strong>便携启动状态 · FR-10</strong><p>发布脚本会核对本地运行时、模型、索引和校验清单；实际 Windows/macOS 无网验收状态以发布报告为准。</p></div>
+          <div class="offline-info api-contract-card"><strong>后端接口</strong><p>前端只通过本机 API 读取模型、知识库、长期记忆和真实诊断结果。</p><code>GET /api/health · GET /api/skills · POST /api/ask<br>POST /api/diagnose/runs · GET /api/diagnose/runs/{id}/events<br>GET/DELETE /api/memory · POST /api/simulator/check<br>POST /api/skills/save · POST /api/manuals/upload · POST /api/manuals/ingest</code></div>
+          <div class="offline-info"><strong>离线运行说明</strong><p>前端静态资源由本地 Python 服务托管。模型、知识库、诊断结果和 Evidence 数据均留在本机，不加载 CDN 或外部资源。</p><code>服务地址：127.0.0.1</code></div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="sourceDialog" class="app-dialog">
+      <form method="dialog"><div class="dialog-head"><div><p class="eyebrow">系统返回的溯源片段</p><h2 id="sourceTitle">出处片段</h2></div><button class="icon-button" value="close" type="submit" aria-label="关闭">×</button></div><p id="sourceText" class="source-text"></p><div class="dialog-footer"><span>出处由索引元数据映射</span><button class="secondary-button" value="close" type="submit">关闭</button></div></form>
+    </dialog>
+
+    <dialog id="conversationDialog" class="app-dialog conversation-dialog">
+      <form method="dialog">
+        <div class="dialog-head"><div><p class="eyebrow">本机保存</p><h2>最近对话</h2></div><button class="icon-button" value="close" type="submit" aria-label="关闭">×</button></div>
+        <button class="new-chat-button dialog-new-chat" id="dialogNewChatBtn" type="button"><span aria-hidden="true">＋</span>新建排障会话</button>
+        <div class="conversation-list in-dialog" id="conversationDialogList" aria-label="最近对话"></div>
+        <p class="dialog-storage-note">会话只保存在此浏览器的本机存储中。</p>
+      </form>
+    </dialog>
+
+    <dialog id="conversationRenameDialog" class="app-dialog rename-dialog">
+      <form id="conversationRenameForm">
+        <div class="dialog-head"><div><p class="eyebrow">对话管理</p><h2>重命名会话</h2></div><button class="icon-button" id="closeRenameDialog" type="button" aria-label="关闭">×</button></div>
+        <label class="field rename-field"><span>会话标题</span><input id="conversationRenameInput" type="text" maxlength="64" required></label>
+        <p class="inline-message" id="renameFeedback" aria-live="polite"></p>
+        <div class="dialog-footer"><span>标题仅保存在本机。</span><div class="button-row"><button class="secondary-button" id="cancelRename" type="button">取消</button><button class="primary-button" type="submit">保存标题</button></div></div>
+      </form>
+    </dialog>
+
+    <dialog id="skillPickerDialog" class="app-dialog skill-picker-dialog">
+      <form method="dialog">
+        <div class="dialog-head"><div><p class="eyebrow">排障技能库</p><h2>选择排查技能</h2></div><button class="icon-button" id="closeSkillPicker" type="button" aria-label="关闭">×</button></div>
+        <p class="dialog-intro">技能选择是可选的。不指定技能时，开始排查会根据问题自动匹配；一键体检需要明确选择一个技能。</p>
+        <label class="sr-only" for="skillPickerSearch">搜索技能名称或描述</label>
+        <input class="skill-search skill-picker-search" id="skillPickerSearch" type="search" placeholder="搜索技能名称或描述" autocomplete="off">
+        <button class="skill-auto-select picker-auto-select" id="autoSkillPicker" type="button">自动匹配（不指定技能）</button>
+        <div class="skill-list picker-skill-list" id="skillPickerGrid" aria-live="polite"></div>
+      </form>
+    </dialog>
+
+    <dialog id="skillDialog" class="app-dialog skill-dialog">
+      <form method="dialog" onsubmit="return false"><div class="dialog-head"><div><p class="eyebrow">知识沉淀</p><h2>存为可复用技能</h2></div><button class="icon-button" id="closeSkillDialog" type="button" aria-label="关闭">×</button></div><p class="dialog-intro">根据本次采集与判定生成技能草稿。保存后会写入本机 data/skills/ 目录。</p><label class="field"><span>新技能名称</span><input id="skillName" type="text" value="现场沉淀技能" data-i18n-value-zh="现场沉淀技能" data-i18n-value-en="Field-derived skill"></label><pre id="draftPreview" class="draft-preview"></pre><div class="dialog-footer"><p class="inline-message" id="saveSkillResult" aria-live="polite"></p><div class="button-row"><button class="secondary-button" id="cancelSkillSave" type="button">稍后再说</button><button class="primary-button" id="saveSkillBtn" type="button">确认保存</button></div></div></form>
+    </dialog>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

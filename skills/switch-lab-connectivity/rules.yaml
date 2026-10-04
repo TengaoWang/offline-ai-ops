@@ -1,0 +1,70 @@
+start: physical-handoff
+rules:
+  - id: physical-handoff
+    label: 是否为必须现场处理的物理故障
+    check: {cmd: scene-diagnosis, regex: '"fault_code"\s*:\s*"E"'}
+    hit: {branch: 物理链路无信号，转现场处理, finding: scene-e, next: end}
+    miss: {branch: 不是物理故障场景, next: route-repair}
+  - id: route-repair
+    label: 是否为可自动修复的路由故障
+    check: {cmd: scene-diagnosis, regex: '"fault_code"\s*:\s*"C"'}
+    hit: {branch: 已执行路由修复并复检, finding: scene-c, next: end}
+    miss: {branch: 不是路由故障场景, next: arp-repair}
+  - id: arp-repair
+    label: 是否为可自动修复的静态 ARP 故障
+    check: {cmd: scene-diagnosis, regex: '"fault_code"\s*:\s*"D"'}
+    hit: {branch: 已更新静态 ARP 并复检, finding: scene-d, next: end}
+    miss: {branch: 不是静态 ARP 故障场景, next: interface-diagnosis}
+  - id: interface-diagnosis
+    label: 是否为接口关闭和上联 VLAN 故障
+    check: {cmd: scene-diagnosis, regex: '"fault_code"\s*:\s*"A"'}
+    hit: {branch: 已定位接口和上联异常, finding: scene-a, next: end}
+    miss: {branch: 接口未被管理关闭, next: vlan-diagnosis}
+  - id: vlan-diagnosis
+    label: 是否为接入口 VLAN 错误
+    check: {cmd: scene-diagnosis, regex: '"fault_code"\s*:\s*"B"'}
+    hit: {branch: 已定位接入口 VLAN 错误, finding: scene-b, next: end}
+    miss: {branch: 未匹配预置场景, finding: unknown-scene, next: end}
+findings:
+  scene-a:
+    severity: critical
+    title: 场景 A：接口被关闭且上联缺少业务 VLAN
+    symptom: PC1 无法访问同事电脑、网关和业务服务器。
+    root_cause: SW1 接入口处于管理关闭，上联口未允许 VLAN 10。本场景用于展示诊断，助手不会自动修改配置。
+    fix_commands: [undo shutdown, port trunk allow-pass vlan 10 20]
+    refs: [port-down, vlan]
+  scene-b:
+    severity: critical
+    title: 场景 B：接入口 VLAN 配置错误
+    symptom: 接入调整后办公电脑访问业务异常。
+    root_cause: PC1 与服务器接入口被划入错误 VLAN。本场景用于展示诊断，助手不会自动修改配置。
+    fix_commands: [port default vlan 10, port default vlan 30]
+    refs: [ping, vlan]
+  scene-c:
+    severity: critical
+    title: 场景 C：发现去程和回程路由故障
+    symptom: 办公网关可达，但业务服务器没有响应。
+    root_cause: SW2 缺少服务器网段路由，SW3 回程下一跳错误。
+    fix_commands: [请在技能库选择“场景 C：路由故障修复”, 在聊天框输入“帮我解决故障”]
+    refs: [route]
+  scene-d:
+    severity: critical
+    title: 场景 D：发现旧静态 ARP 绑定
+    symptom: 更换设备后链路正常，但跨网段业务不通。
+    root_cause: SW2、SW3 仍绑定对端旧 MAC，设备更换后没有同步更新。
+    fix_commands: [请在技能库选择“场景 D：静态 ARP 修复”, 在聊天框输入“帮我解决故障”]
+    refs: [arp]
+  scene-e:
+    severity: critical
+    title: 场景 E：无法通过软件修复，必须现场物理操作
+    symptom: 软件配置检查后，SW2 与 SW3 互联接口仍为 DOWN。
+    root_cause: 模拟观测显示接收信号缺失。此故障不能通过软件命令解决，必须由现场人员检查网线、光纤、接口或光模块。
+    fix_commands: [检查接口连接和指示灯, 更换网线或光纤测试, 检查两端光模块]
+    refs: [physical-link]
+  unknown-scene:
+    severity: warning
+    title: 当前状态未匹配五个展示场景
+    symptom: 已完成采集，但没有匹配 A–E 场景特征。
+    root_cause: 实验可能处于健康状态或已被手工修改。
+    fix_commands: [在模拟器重新选择 A–E 场景后运行]
+    refs: [ping]

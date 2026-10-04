@@ -1,0 +1,4 @@
+refs:
+  arp-dup:
+    sections: ["21.8.1.5"]
+    query: 设备作为网关 局域网用户时通时断 地址冲突

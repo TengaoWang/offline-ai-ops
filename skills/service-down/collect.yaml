@@ -1,0 +1,18 @@
+platform: windows                # 演示平台；本机命令同时写了 macOS 版本（开发机上也能真实执行）
+timeout: 10
+vars:
+  mgmt:                          # 交换机管理地址：默认取本机默认网关，可用 OPS_MGMT 修改
+    from: ipconfig
+    regex: '(?:默认网关|Default Gateway)[ .]*:\s*(?:[0-9A-Fa-f:]+%\d+\s+)?(\d+\.\d+\.\d+\.\d+)|^default\s+(\d+\.\d+\.\d+\.\d+)'
+    default: 192.168.10.1
+commands:
+  - id: ipconfig
+    run: {windows: ipconfig, mac: netstat -rn}
+  - id: ping-mgmt
+    run: {windows: 'ping -n 2 -w 1000 ${mgmt}', mac: 'ping -c 2 -t 2 ${mgmt}'}
+  - id: ssh-status
+    run: display ssh server status
+    target: switch
+  - id: users
+    run: display users
+    target: switch

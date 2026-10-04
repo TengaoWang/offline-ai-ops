@@ -1,0 +1,36 @@
+{"id": "fr01", "type": "fr2", "query": "S5700 上怎么把 GE0/0/1 配成 trunk 口？", "gold": ["21.7.4.4", "22.28"]}
+{"id": "fr02", "type": "fr2", "query": "不同 VLAN 之间互相访问不通怎么办", "gold": ["21.7.4.14"]}
+{"id": "fr03", "type": "fr2", "query": "以太网接口物理 DOWN 怎么排查", "gold": ["8", "22.46"]}
+{"id": "fr04", "type": "fr2", "query": "交换机 CPU 占用率高怎么处理", "gold": ["17"]}
+{"id": "fr05", "type": "fr2", "query": "Ping 不通怎么定位故障", "gold": ["15"]}
+{"id": "ag01", "type": "agent", "query": "S5700 端口 VLAN 配置 排障", "gold": ["21.7.4.14", "21.7.4.4", "22.53"]}
+{"id": "ag02", "type": "agent", "query": "display interface brief 接口状态 down", "gold": ["8", "22.46"]}
+{"id": "ag03", "type": "agent", "query": "LACP 模式 Eth-Trunk 接口不能 UP", "gold": ["21.7.1.1", "22.15"]}
+{"id": "ag04", "type": "agent", "query": "接口 error-down 状态恢复", "gold": ["22.44"]}
+{"id": "ag05", "type": "agent", "query": "网络丢包 故障定位", "gold": ["9"]}
+{"id": "fm01", "type": "formal", "query": "接口物理状态 DOWN 的常见原因和处理步骤", "gold": ["8", "22.46"], "pair": "co01"}
+{"id": "fm02", "type": "formal", "query": "二层环路故障如何定位", "gold": ["7"], "pair": "co02"}
+{"id": "fm03", "type": "formal", "query": "用户无法通过 DHCP 获取 IP 地址", "gold": ["10"], "pair": "co03"}
+{"id": "fm04", "type": "formal", "query": "CPU 占用率高的故障定位方法", "gold": ["17"], "pair": "co04"}
+{"id": "fm05", "type": "formal", "query": "网络丢包故障排查", "gold": ["9"], "pair": "co05"}
+{"id": "fm06", "type": "formal", "query": "设备异常重启的故障定位", "gold": ["11"], "pair": "co06"}
+{"id": "fm07", "type": "formal", "query": "SSH 登录交换机失败的定位方法", "gold": ["19", "22.3", "21.4.1.2"], "pair": "co07"}
+{"id": "fm08", "type": "formal", "query": "交换机忘记登录密码如何修改或清除", "gold": ["22.1"], "pair": "co08"}
+{"id": "fm09", "type": "formal", "query": "交换机如何恢复出厂配置", "gold": ["22.2"], "pair": "co09"}
+{"id": "fm10", "type": "formal", "query": "PoE 设备 PD 供电异常的定位", "gold": ["18"], "pair": "co10"}
+{"id": "co01", "type": "colloquial", "query": "网口灯不亮，网线插上也没反应", "gold": ["8", "22.46"], "pair": "fm01"}
+{"id": "co02", "type": "colloquial", "query": "整个网突然特别卡，交换机的灯一直狂闪，是不是有环", "gold": ["7"], "pair": "fm02"}
+{"id": "co03", "type": "colloquial", "query": "电脑一直拿不到地址，显示 169 开头的 IP", "gold": ["10"], "pair": "fm03"}
+{"id": "co04", "type": "colloquial", "query": "交换机特别卡，登上去敲命令都很慢", "gold": ["17"], "pair": "fm04"}
+{"id": "co05", "type": "colloquial", "query": "视频会议老是卡，ping 的时候时不时丢几个包", "gold": ["9"], "pair": "fm05"}
+{"id": "co06", "type": "colloquial", "query": "交换机隔一会儿就自己重启一次", "gold": ["11"], "pair": "fm06"}
+{"id": "co07", "type": "colloquial", "query": "用 SSH 连交换机一直连不上", "gold": ["19", "22.3", "21.4.1.2"], "pair": "fm07"}
+{"id": "co08", "type": "colloquial", "query": "交换机密码忘了进不去了", "gold": ["22.1"], "pair": "fm08"}
+{"id": "co09", "type": "colloquial", "query": "想把交换机清空，变回刚买来的样子", "gold": ["22.2"], "pair": "fm09"}
+{"id": "co10", "type": "colloquial", "query": "摄像头和 AP 插到交换机上不通电不亮", "gold": ["18"], "pair": "fm10"}
+{"id": "co11", "type": "colloquial", "query": "怎么检查光模块是不是坏了？", "gold": ["22.51.6.1", "8.2.3"], "note": "补充的口语化现场问题"}
+{"id": "un01", "type": "unanswerable", "query": "S5700 的保修期是多久", "gold": []}
+{"id": "un02", "type": "unanswerable", "query": "Windows 电脑怎么重装系统", "gold": []}
+{"id": "un03", "type": "unanswerable", "query": "MySQL 主从复制怎么配置", "gold": []}
+{"id": "un04", "type": "unanswerable", "query": "Nginx 报 502 怎么排查", "gold": []}
+{"id": "un05", "type": "unanswerable", "query": "这款交换机多少钱一台", "gold": []}

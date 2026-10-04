@@ -1,0 +1,13 @@
+# 来源：《华为S系列园区交换机维护宝典》21.4.2.35 P1357 的 dir flash: 示例（前 5 个文件原样）。为演示场景增加了旧版本系统软件 s2300-v100r003.cc 和回收站中的 [log_bak.zip]（21.4.2.21 P1354：回收站文件名用 [] 标识），剩余空间相应改为 1,083 KB
+Directory of flash:/
+
+  Idx  Attr     Size(Byte)  Date        Time       FileName
+    0  -rw-            812  Jan 01 2008 00:00:56   private-data.txt
+    1  -rw-            948  Jan 01 2008 07:16:55   vrpcfg.zip
+    2  -rw-         90,602  Jan 03 2008 03:58:15   v100r005sph001.pat
+    3  -rw-      6,418,980  Jan 19 2008 20:19:42   s2300-v100r005.cc
+    4  -rw-         12,240  Jan 03 2008 04:52:43   $_patchstate_reboot
+    5  -rw-      6,302,114  Nov 12 2007 09:21:05   s2300-v100r003.cc
+    6  -rw-      1,048,576  Jan 18 2008 16:40:11   [log_bak.zip]
+
+14,632 KB total (1,083 KB free)

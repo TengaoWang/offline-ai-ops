@@ -1,0 +1,43 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+# 模型和索引不进 git（体积大，放 SSD）
+models/
+*.gguf
+kb/index.db
+.Rhistory
+# 厂商手册有版权限制（不得复制传播），不进 git，放 SSD 或线下传递
+kb/docs/*
+!kb/docs/.gitkeep
+switch_demo_v2/assets/*.pdf
+switch_demo_v2/assets/manual-pages/*.png
+# 测试用 PDF 由 tests/make_fixture.py 生成
+tests/fixtures/
+kb/index.db-journal
+kb/index-*.db
+# Local immutable KB versions and task/upload data
+kb/backups/
+kb/staging/
+kb/quarantine/
+kb/revisions/
+kb/current.json
+kb/.current-*.json
+runtime/
+# 长期记忆（本机数据，不进 git）
+kb/memory.db
+kb/memory/
+# 便携构建临时目录与 IDE 配置
+.tmp-portable/
+.idea/
+
+# 前端会话 / 证据 / 回放等运行时用户数据（随 U 盘走，不进 git）
+data/
+# 旧版本保存在源码技能目录中的现场技能；仅作兼容读取，禁止提交真实环境数据
+skills/saved-*/
+# 本地路演稿，不属于公开源码
+路演话术-*.md
+# Local console captures and copied/running eNSP lab (may contain device configs)
+ensp-runtime/
+# 本地生成的便携演示包（含厂商手册）
+dist/

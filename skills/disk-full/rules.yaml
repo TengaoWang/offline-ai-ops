@@ -1,0 +1,62 @@
+# 存储空间规则树：使用率 → 回收站 → 闲置系统软件
+start: usage
+rules:
+  - id: usage
+    label: Flash 使用率超过 ${threshold}%
+    check:
+      cmd: dir-all
+      extract: '(?P<total>[\d,]+) KB total \((?P<free>[\d,]+) KB free\)'
+      expr: (total - free) * 100 / total
+      op: '>'
+      value: '${threshold}'
+    hit: {branch: '空间不足（已用 ${value}%）', finding: flash-full, next: recycle}
+    miss: {branch: '空间充足（已用 ${value}%）', finding: flash-ok, next: recycle}
+  - id: recycle
+    label: 回收站中有未清空的文件
+    check: {cmd: dir-all, regex: '^\s*\d+\s+\S+\s+(?P<recycled_size>[\d,]+)\s+.*\[(?P<recycled>[^\]]+)\]\s*$'}
+    hit: {branch: '回收站文件占用空间（${recycled}）', finding: recycle-bin, next: idle-software}
+    miss: {branch: 回收站为空, next: idle-software}
+  - id: idle-software
+    label: Flash 中有两个以上系统软件（.cc）
+    check: {cmd: dir-all, regex: '(?P<cc1>[\w.-]+\.cc)\s*$[\s\S]*?(?P<cc2>[\w.-]+\.cc)\s*$'}
+    hit: {branch: 存在可能闲置的系统软件, next: running}
+    miss: {branch: 只有一个系统软件, next: end}
+  - id: running
+    label: 已确认当前运行的系统软件
+    check: {cmd: startup, regex: '^Startup system software:\s+(?P<running>\S+)'}
+    hit: {branch: '当前运行 ${running}', finding: idle-software, next: end}
+    miss: {branch: 无法确认当前运行的系统软件, next: end}
+findings:
+  flash-full:
+    severity: critical
+    title: Flash 存储空间不足
+    symptom: 'dir /all flash: 显示总量 ${total} KB、剩余 ${free} KB，已用 ${value}%，超过 ${threshold}%。'
+    root_cause: Flash 中有回收站文件、闲置的系统软件或过期文件，升级和保存配置可能失败。
+    fix_commands:
+      - 'dir /all flash:'
+      - reset recycle-bin
+      - 'delete /unreserved flash:/<不再使用的文件>'
+    refs: [free-space, upgrade-space]
+  flash-ok:
+    severity: ok
+    title: Flash 存储空间充足
+    symptom: 'Flash 已用 ${value}%，剩余 ${free} KB。'
+    root_cause: 未发现存储空间问题。
+    fix_commands: []
+    refs: [upgrade-space]
+  recycle-bin:
+    severity: warning
+    title: 回收站中有未清空的文件
+    symptom: 'dir /all flash: 中 ${recycled}（${recycled_size} 字节）在回收站中，仍占用空间。'
+    root_cause: 用 delete 删除的文件进入回收站，不清空就不释放空间。
+    fix_commands: [reset recycle-bin]
+    refs: [recycle, free-space]
+  idle-software:
+    severity: warning
+    title: Flash 中存在闲置的系统软件
+    symptom: 'Flash 中有 ${cc1} 和 ${cc2} 两个系统软件，当前运行的是 ${running}。'
+    root_cause: 升级后旧版本系统软件没有删除，占用大量空间。
+    fix_commands:
+      - display startup
+      - 'delete /unreserved flash:/<闲置的 .cc 文件>（不要删除正在运行的 ${running}）'
+    refs: [upgrade-space]

@@ -1,0 +1,13 @@
+# 来源：《华为S系列园区交换机维护宝典》21.8.1.3 P1642 的 display logbuffer 示例（表头和 4 条 MSTP 日志原样；PDF 中折行的日志合并为一行），加上 21.8.1.5 P1645 的 ARP_DUPLICATE_IPADDR 告警（原文为字段模板，为演示场景填入了具体的 IP、接口和 MAC）
+Logging buffer configuration and contents : enabled
+Allowed max buffer size : 1024
+Actual buffer size : 512
+Channel number : 4 , Channel name : logbuffer
+Dropped messages : 0
+Overwritten messages : 0
+Current messages : 267
+May 15 2017 14:29:21 WZ-S9306-C-1 %%01MSTP/6/RECEIVE_MSTITC(l): MSTP received BPDU with TC, MSTP process 0 instance 0, port name is Eth-Trunk0.
+May 15 2017 14:30:02 WZ-S9306-C-1 %%01MSTP/6/RECEIVE_MSTITC(l): MSTP received BPDU with TC, MSTP process 0 instance 0, port name is GigabitEthernet1/0/38.
+May 15 2017 14:30:42 WZ-S9306-C-1 %%01MSTP/6/RECEIVE_MSTITC(l): MSTP received BPDU with TC, MSTP process 0 instance 0, port name is GigabitEthernet1/0/38.
+May 15 2017 14:31:20 WZ-S9306-C-1 %%01MSTP/6/RECEIVE_MSTITC(l): MSTP received BPDU with TC, MSTP process 0 instance 0, port name is GigabitEthernet2/0/18.
+May 15 2017 14:32:07 WZ-S9306-C-1 %%01ARP/4/ARP_DUPLICATE_IPADDR(l): Received an ARP packet with a duplicate IP address from the interface. (IpAddress=192.168.10.1, InterfaceName=GigabitEthernet1/0/12, MacAddress=00e0-fc12-3456)

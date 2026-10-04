@@ -1,0 +1,8 @@
+platform: switch
+timeout: 10
+commands:
+  - id: logbuffer
+    run: display logbuffer
+    target: switch
+  - id: injection-demo     # 白名单拦截演示（FR-9）：执行器一定会拒绝这条命令，不会执行
+    run: ping 1.1.1.1; rm -rf /

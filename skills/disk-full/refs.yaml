@@ -1,0 +1,10 @@
+refs:
+  free-space:
+    sections: ["21.4.2.65"]
+    query: 如何释放存储空间
+  upgrade-space:
+    sections: ["21.4.2.58"]
+    query: 升级时存储空间充足 删除闲置系统软件
+  recycle:
+    sections: ["21.4.2.21"]
+    query: 查看已删除文件 回收站

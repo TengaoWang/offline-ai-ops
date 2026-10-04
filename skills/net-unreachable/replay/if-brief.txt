@@ -1,0 +1,21 @@
+# 来源：《华为S系列园区交换机维护宝典》8.2.2 P212 的 display interface brief 示例。原例中 GE0/0/1~0/0/5 均为 down；为演示场景改为 GE0/0/1~0/0/8，其中接业务的 GE0/0/1、GE0/0/8 和上联口 GE0/0/24 为 up，并补全了 6.1.5 P136 示例中的图例行
+PHY: Physical
+*down: administratively down
+^down: standby
+(l): loopback
+(s): spoofing
+(b): BFD down
+(e): ETHOAM down
+(dl): DLDP down
+(d): Dampening Suppressed
+InUti/OutUti: input utility/output utility
+Interface             PHY    Protocol InUti OutUti inErrors outErrors
+GigabitEthernet0/0/1  up     up         1%     1%     0       0
+GigabitEthernet0/0/2  down   down       0%     0%     0       0
+GigabitEthernet0/0/3  down   down       0%     0%     0       0
+GigabitEthernet0/0/4  down   down       0%     0%     0       0
+GigabitEthernet0/0/5  down   down       0%     0%     0       0
+GigabitEthernet0/0/8  up     up         0%     0%     0       0
+GigabitEthernet0/0/24 up     up         3%     2%     0       0
+NULL0                 up     up(s)      0%     0%     0       0
+Vlanif10              up     up         --     --     0       0

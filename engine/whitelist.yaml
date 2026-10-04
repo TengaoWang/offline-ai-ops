@@ -1,0 +1,65 @@
+# 白名单命令执行器的规则（FR-9）。只放行只读诊断命令，改这个文件就能调整放行范围。
+#
+# 每条命令先过「危险字符」检查，再按下面的规则逐个检查参数：
+#   flags:    允许的开关，值为 null 表示不带参数；{max: N} 表示后面跟一个不超过 N 的整数
+#   args:     允许的位置参数，host = IP 或主机名，或列出允许的固定写法
+#   max_args: 位置参数最多几个
+
+# 出现任何一个就直接拒绝：命令拼接、管道、重定向、变量展开、换行
+dangerous_chars: [";", "&", "|", "`", "$", ">", "<", "^", "%", "\n", "\r"]
+
+# 本机命令（演示平台 Windows）：真实执行
+local:
+  ping:
+    flags: {"-n": {max: 4}, "-w": {max: 2000}, "-4": null}
+    args: host
+    max_args: 1
+  tracert:
+    flags: {"-d": null, "-h": {max: 10}, "-w": {max: 1000}}
+    args: host
+    max_args: 1
+  ipconfig:
+    args: ["/all"]
+    max_args: 1
+  arp:
+    flags: {"-a": null}
+    max_args: 0
+  route:
+    args: ["print"]
+    max_args: 1
+  netstat:
+    flags: {"-a": null, "-n": null, "-an": null, "-r": null}
+    max_args: 0
+
+# 本机命令（macOS，开发机）：真实执行。写法和 Windows 不同（ping -c、ifconfig、netstat -rn）
+local_mac:
+  ping:
+    flags: {"-c": {max: 4}, "-t": {max: 5}, "-W": {max: 2000}, "-n": null}
+    args: host
+    max_args: 1
+  traceroute:
+    flags: {"-n": null, "-m": {max: 10}, "-w": {max: 2}, "-q": {max: 3}}
+    args: host
+    max_args: 1
+  ifconfig:
+    max_args: 0
+  arp:
+    flags: {"-a": null, "-n": null, "-an": null}
+    max_args: 0
+  netstat:
+    flags: {"-r": null, "-n": null, "-rn": null, "-an": null}
+    max_args: 0
+
+# 交换机命令：只允许查看类（display、dir），走回放；有真实设备后改为 SSH 执行
+switch:
+  display:
+    args: word
+    max_args: 6
+  dir:
+    args: ["/all", "flash:", "cfcard:"]
+    max_args: 2
+
+# 明确拒绝（即使以后有人把它们加进上面的规则，这里仍然优先拒绝）
+denied: [del, erase, format, rd, rmdir, shutdown, reboot, reset, save, undo, delete,
+         system-view, quit, return, taskkill, reg, netsh, sc, net, powershell, cmd,
+         rm, mv, cp, write, startup, schedule, copy, move]
