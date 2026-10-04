@@ -59,6 +59,83 @@ ollama list                       # 列表里应出现 qwen3:8b 和 bge-m3
 ollama run qwen3:8b "你好"         # 能正常回答即可，第一次加载需要十几秒
 ```
 
+### 4. 启动 Offline 助手
+
+以下操作均在项目根目录执行。首次使用前，请先按照“快速开始”完成 Python 虚拟环境、项目依赖和知识库索引的初始化；后续启动可直接执行本节步骤。
+
+#### 4.1 确认 Ollama 服务正在运行
+
+通过 Ollama 桌面应用安装时，请保持应用处于运行状态。通过命令行安装时，可在单独的终端窗口中启动服务：
+
+```bash
+ollama serve
+```
+
+如果系统提示端口 `11434` 已被占用，通常表示 Ollama 已经在后台运行，无需重复启动。
+
+#### 4.2 检查运行环境
+
+macOS / Linux：
+
+```bash
+.venv/bin/python -m llm health
+```
+
+Windows PowerShell：
+
+```powershell
+.venv\Scripts\python -m llm health
+```
+
+检查结果中的 `backend_ready`、`model`、`embed_model`、`index` 和 `rag_ready` 应均为 `true`。如果存在未就绪项目，请先根据输出信息检查 Ollama、模型文件或知识库索引。
+
+#### 4.3 启动 Web 服务
+
+macOS / Linux：
+
+```bash
+.venv/bin/python -m ui.server --host 127.0.0.1 --port 8765
+```
+
+Windows PowerShell：
+
+```powershell
+.venv\Scripts\python -m ui.server --host 127.0.0.1 --port 8765
+```
+
+服务启动后，在浏览器中访问 [http://127.0.0.1:8765](http://127.0.0.1:8765)。启动终端需要保持运行；如需停止服务，请在该终端中按 `Ctrl+C`。
+
+服务仅监听本机回环地址 `127.0.0.1`，不会向局域网或公网开放。
+
+Offline 助手采用本地 Web 操作台形式运行，静态资源由 Python 服务直接托管，不依赖 Node.js、CDN 或外部网络资源。主对话区域提供以下两种工作模式：
+
+- **手册问答**：连接本地 RAG，从已经建立索引的设备手册中检索答案，并展示对应的文件、章节和页码。
+- **故障诊断**：连接本地 `SkillEngine`，根据故障描述匹配排查技能，并执行经过白名单校验的只读采集命令。
+
+执行故障诊断时，需要明确选择“本机只读执行”或“模拟器固定输出”。真实执行失败时，系统不会自动切换到模拟模式。技能包中的修复命令仅作为建议展示，不会由系统自动执行。
+
+诊断完成后，可通过“存为技能”功能将本次流程保存到本机 `skills/` 目录。后端仅接受当前服务生成且已经完成的诊断运行，并会在写入前重新校验命令、规则和出处。
+
+技能包格式参见 [`docs/skill-authoring.md`](docs/skill-authoring.md)；启动参数、目标限制与错误恢复说明参见 [`docs/operations-runbook.md`](docs/operations-runbook.md)。
+
+#### 4.4 处理端口占用
+
+如果端口 `8765` 已被其他程序占用，可指定其他本机端口，例如 `8877`。
+
+macOS / Linux：
+
+```bash
+.venv/bin/python -m ui.server --host 127.0.0.1 --port 8877
+```
+
+Windows PowerShell：
+
+```powershell
+.venv\Scripts\python -m ui.server --host 127.0.0.1 --port 8877
+```
+
+更换端口后，请访问 [http://127.0.0.1:8877](http://127.0.0.1:8877)。
+
 ### 常见问题
 
 | 现象 | 解决方法 |
@@ -95,22 +172,6 @@ Windows 上把命令里的 `.venv/bin/python` 换成 `.venv\Scripts\python`。
 
 没有模型时可以先用 mock 模式开发界面：`LLM_MOCK=1 .venv/bin/python -m llm ask "随便问"`。
 接口的参数、返回格式和配置见 [`llm/README.md`](llm/README.md)。
-
-## 启动前端操作台
-
-前端是本地 Web 操作台，静态资源由 Python 服务托管，不需要 Node、CDN 或外网请求。
-
-```bash
-.venv/bin/python -m ui.server
-```
-
-打开 `http://127.0.0.1:8765`。主聊天明确区分“手册问答”和“故障诊断”：前者连接本地 RAG，后者连接真实 `SkillEngine`。诊断还需明确选择“本机只读执行”或带持续标识的“模拟器固定输出”；失败不会偷偷回退为模拟。
-
-四个预置技能都只执行 `collect.yaml` 中通过全局白名单的只读参数数组，始终 `shell=False`。报告中的修复命令只展示、不会执行。诊断完成后可点“存为技能”，后端只接受本服务保存的已完成 `run_id`，重新校验后原子写入 `skills/`。
-
-技能包格式见 [`docs/skill-authoring.md`](docs/skill-authoring.md)，启动、目标和错误恢复见 [`docs/operations-runbook.md`](docs/operations-runbook.md)。
-
-没有模型时可用 `LLM_MOCK=1` 验证问答界面，但 Mock 回答会明确标识，不能用于现场判断。诊断模拟不依赖 `LLM_MOCK`，请在 UI 中显式选择 simulation。
 
 ## 便携离线包
 
