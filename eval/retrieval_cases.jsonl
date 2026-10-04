@@ -28,7 +28,7 @@
 {"id": "co08", "type": "colloquial", "query": "交换机密码忘了进不去了", "gold": ["22.1"], "pair": "fm08"}
 {"id": "co09", "type": "colloquial", "query": "想把交换机清空，变回刚买来的样子", "gold": ["22.2"], "pair": "fm09"}
 {"id": "co10", "type": "colloquial", "query": "摄像头和 AP 插到交换机上不通电不亮", "gold": ["18"], "pair": "fm10"}
-{"id": "co11", "type": "colloquial", "query": "怎么检查光模块是不是坏了？", "gold": ["22.51.6.1", "8.2.3"], "note": "陈文韬手动测试时提出"}
+{"id": "co11", "type": "colloquial", "query": "怎么检查光模块是不是坏了？", "gold": ["22.51.6.1", "8.2.3"], "note": "补充的口语化现场问题"}
 {"id": "un01", "type": "unanswerable", "query": "S5700 的保修期是多久", "gold": []}
 {"id": "un02", "type": "unanswerable", "query": "Windows 电脑怎么重装系统", "gold": []}
 {"id": "un03", "type": "unanswerable", "query": "MySQL 主从复制怎么配置", "gold": []}

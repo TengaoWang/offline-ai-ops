@@ -3,10 +3,8 @@
 | 项目 | 内容 |
 |---|---|
 | 负责模块 | `llm/`（`retrieve` / `ask` / `answer`） |
-| 分支 | `dev-rag-v2` |
-| 更新日期 | 2026-10-03 |
-| 状态 | 混合检索、出处核对已合进 `main`；新问答流程 `answer()`（调度器 + 原文截取 + 模型生成 + 审核）在 `dev-rag-v2` 上 |
-| 相关文档 | 交接说明 [`rag-handoff.md`](rag-handoff.md)；开发过程的逐条记录在 `rag-notes` 分支 |
+| 状态 | 混合检索、出处核对和 `answer()` 问答流程已合进 `main` |
+| 相关文档 | 接口说明见 [`../llm/README.md`](../llm/README.md)，使用方法见 [`usage.md`](usage.md) |
 
 ---
 

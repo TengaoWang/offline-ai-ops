@@ -149,7 +149,6 @@ Windows PowerShell：`$env:LLM_MOCK="1"`。
 ## 原理和改进记录
 
 - 技术路线（解析、切块、混合检索、出处保护等每一步怎么做、为什么）：[`docs/rag-plan.md`](../docs/rag-plan.md)
-- 交接说明（现状、已知问题、下一步）：[`docs/rag-handoff.md`](../docs/rag-handoff.md)
 - 检索评测：[`eval/README.md`](../eval/README.md)
 
 ## 目前的限制

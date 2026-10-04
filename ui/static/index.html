@@ -252,7 +252,7 @@
     </dialog>
 
     <dialog id="skillDialog" class="app-dialog skill-dialog">
-      <form method="dialog" onsubmit="return false"><div class="dialog-head"><div><p class="eyebrow">知识沉淀</p><h2>存为可复用技能</h2></div><button class="icon-button" id="closeSkillDialog" type="button" aria-label="关闭">×</button></div><p class="dialog-intro">根据本次采集与判定生成技能草稿。保存后会写入本机 skills/ 目录。</p><label class="field"><span>新技能名称</span><input id="skillName" type="text" value="现场沉淀技能" data-i18n-value-zh="现场沉淀技能" data-i18n-value-en="Field-derived skill"></label><pre id="draftPreview" class="draft-preview"></pre><div class="dialog-footer"><p class="inline-message" id="saveSkillResult" aria-live="polite"></p><div class="button-row"><button class="secondary-button" id="cancelSkillSave" type="button">稍后再说</button><button class="primary-button" id="saveSkillBtn" type="button">确认保存</button></div></div></form>
+      <form method="dialog" onsubmit="return false"><div class="dialog-head"><div><p class="eyebrow">知识沉淀</p><h2>存为可复用技能</h2></div><button class="icon-button" id="closeSkillDialog" type="button" aria-label="关闭">×</button></div><p class="dialog-intro">根据本次采集与判定生成技能草稿。保存后会写入本机 data/skills/ 目录。</p><label class="field"><span>新技能名称</span><input id="skillName" type="text" value="现场沉淀技能" data-i18n-value-zh="现场沉淀技能" data-i18n-value-en="Field-derived skill"></label><pre id="draftPreview" class="draft-preview"></pre><div class="dialog-footer"><p class="inline-message" id="saveSkillResult" aria-live="polite"></p><div class="button-row"><button class="secondary-button" id="cancelSkillSave" type="button">稍后再说</button><button class="primary-button" id="saveSkillBtn" type="button">确认保存</button></div></div></form>
     </dialog>
 
     <script src="./app.js"></script>
