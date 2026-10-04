@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<topo version="1.2.00.300">
+  <devices>
+    <dev id="7B23A5D0-D834-4AC1-B933-5623C2D61A11" name="OPS-SW1" model="S5700" settings="" com_port="2000" bootmode="1" cx="180.000000" cy="260.000000" edit_left="180" edit_top="314">
+      <slot number="slot17" isMainBoard="1"><interface sztype="Ethernet" interfacename="GE" count="24" /></slot>
+    </dev>
+    <dev id="7B23A5D0-D834-4AC1-B933-5623C2D61A12" name="OPS-PROBE" model="S5700" settings="" com_port="2001" bootmode="1" cx="520.000000" cy="260.000000" edit_left="520" edit_top="314">
+      <slot number="slot17" isMainBoard="1"><interface sztype="Ethernet" interfacename="GE" count="24" /></slot>
+    </dev>
+  </devices>
+  <lines>
+    <line srcDeviceID="7B23A5D0-D834-4AC1-B933-5623C2D61A11" destDeviceID="7B23A5D0-D834-4AC1-B933-5623C2D61A12">
+      <interfacePair lineName="Copper" srcIndex="0" srcBoundRectIsMoved="0" srcBoundRect_X="0" srcBoundRect_Y="0" srcOffset_X="0" srcOffset_Y="0" tarIndex="0" tarBoundRectIsMoved="0" tarBoundRect_X="0" tarBoundRect_Y="0" tarOffset_X="0" tarOffset_Y="0" />
+    </line>
+  </lines>
+  <shapes />
+  <txttips>
+    <txttip left="80" top="80" right="750" bottom="150" content="Offline Ops Lab - S5700 port shutdown&#x0D;&#x0A;OPS-SW1 192.168.10.1 -- GE0/0/1 VLAN10 -- OPS-PROBE 192.168.10.2&#x0D;&#x0A;Console: 127.0.0.1:2000 / 2001. Probe is a second virtual switch." fontname="Consolas" fontstyle="0" editsize="110" txtcolor="-16777216" txtbkcolor="-7278960" charset="1" />
+  </txttips>
+</topo>

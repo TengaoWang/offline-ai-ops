@@ -584,9 +584,12 @@ async function loadSkills() {
 
 function renderSkills() {
   const glyphs = { "net-unreachable": "N", "disk-full": "D", "service-down": "S", "log-audit": "L" };
+  const displayPriority = { "switch-route-repair": 0, "switch-arp-repair": 1 };
   const query = state.skillQuery.trim().toLowerCase();
   const localizedText = (value) => state.locale === "en" ? (EN_TRANSLATIONS[value] || value) : value;
-  const matches = state.skills.filter((skill) => [skill.name, skill.description, skill.id, localizedText(skill.name), localizedText(skill.description)].join(" ").toLowerCase().includes(query));
+  const matches = state.skills
+    .filter((skill) => [skill.name, skill.description, skill.id, localizedText(skill.name), localizedText(skill.description)].join(" ").toLowerCase().includes(query))
+    .sort((left, right) => (displayPriority[left.id] ?? 10) - (displayPriority[right.id] ?? 10));
   const createCards = (items) => items.map((skill) => {
     const selected = state.selectedSkill === skill.id;
     const readiness = state.skillReplays[skill.id] ? "已保存回放可运行" : skill.demo_ready === false ? "待配置模拟回放" : skill.source === "demo" ? "本地模拟可运行" : "本地技能包";
@@ -612,6 +615,10 @@ function selectSkill(skillId) {
   if (state.busy) return;
   state.selectedSkill = skillId || null;
   state.manualSkill = Boolean(skillId);
+  const selected = state.skills.find((skill) => skill.id === skillId);
+  if (selected?.targets?.includes("simulator") && !selected.targets.includes("local")) {
+    $("#executionMode").value = "simulation";
+  }
   const conversation = activeConversation();
   if (conversation) {
     conversation.skillId = state.selectedSkill;
@@ -1259,9 +1266,14 @@ async function runDiagnostic(skillId, issue = "", executionMode = "real") {
     setProgress(0, "等待开始");
     return;
   }
+  const simulatorOnly = Boolean(skill?.targets?.includes("simulator") && !skill.targets.includes("local"));
+  const effectiveMode = simulatorOnly ? "simulation" : executionMode;
+  const target = simulatorOnly
+    ? { kind: "simulator", display_name: "switch-lab", base_url: "http://127.0.0.1:8878/api/v1" }
+    : { kind: "local", display_name: "localhost" };
   let created;
   try {
-    created = await api("/api/diagnose/runs", { method: "POST", body: JSON.stringify({ skill_id: skillId, issue, execution_mode: executionMode, target: { kind: "local", display_name: "localhost" } }) });
+    created = await api("/api/diagnose/runs", { method: "POST", body: JSON.stringify({ skill_id: skillId, issue, execution_mode: effectiveMode, target }) });
   } catch (error) {
     appendNotice("无法启动诊断", error.message, "error");
     setBusy(false);
@@ -1282,8 +1294,15 @@ async function runDiagnostic(skillId, issue = "", executionMode = "real") {
     const badge = $("[data-run-badge]", runEl);
     if (payload.execution_mode === "simulation") {
       badge.classList.add("demo");
-      badge.textContent = "模拟器固定输出";
-      $(".run-intro", runEl).textContent = "当前运行经过真实技能引擎与规则树，但采集输出来自明确标识的 simulation 固件。";
+      if (payload.target?.kind === "simulator") {
+        badge.textContent = "交换机模拟器采集中";
+        $(".run-intro", runEl).textContent = skillId?.includes("-repair")
+          ? "当前使用已选择的修复技能，仅在本机交换机模拟器内执行受控配置并复检。"
+          : "当前运行通过本机回环 API 读取交换机模拟器，只执行诊断采集。";
+      } else {
+        badge.textContent = "模拟器固定输出";
+        $(".run-intro", runEl).textContent = "当前运行经过真实技能引擎与规则树，但采集输出来自明确标识的 simulation 固件。";
+      }
     } else {
       badge.textContent = "本机白名单只读执行中";
     }
@@ -1326,6 +1345,16 @@ async function runDiagnostic(skillId, issue = "", executionMode = "real") {
     setBusy(false);
     updateEvidenceMetrics();
     generateEvidence();
+    const finding = state.lastRun.findings?.[0];
+    if (finding?.finding_id === "scene-c") {
+      appendNotice("下一步：选择场景 C 修复技能", "请在技能库选择“场景 C：路由故障修复”，然后在聊天框输入“帮我解决故障”。", "");
+    } else if (finding?.finding_id === "scene-d") {
+      appendNotice("下一步：选择场景 D 修复技能", "请在技能库选择“场景 D：静态 ARP 修复”，然后在聊天框输入“帮我解决故障”。", "");
+    } else if (finding?.finding_id === "scene-e") {
+      appendNotice("必须现场物理操作", "该故障不能通过软件命令解决。请现场检查交换机接口、网线、光纤及光模块。", "error");
+    } else if (finding?.finding_id === "repaired") {
+      appendNotice("故障已解决", "助手已执行模拟器配置，端到端复检通过。", "");
+    }
     persistActiveConversation();
     source.close();
     scrollChatToBottom();
@@ -1655,7 +1684,10 @@ function bindEvents() {
   $$(".nav-item[data-view]").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
   $("#newChatBtn").addEventListener("click", createNewConversation);
   $("#dialogNewChatBtn").addEventListener("click", createNewConversation);
-  $("#skillPickerBtn").addEventListener("click", () => $("#skillPickerDialog").showModal());
+  $("#skillPickerBtn").addEventListener("click", async () => {
+    $("#skillPickerDialog").showModal();
+    await loadSkills();
+  });
   $("#closeSkillPicker").addEventListener("click", () => $("#skillPickerDialog").close());
   $("#skillGrid").addEventListener("click", handleSkillListClick);
   $("#skillPickerGrid").addEventListener("click", handleSkillListClick);

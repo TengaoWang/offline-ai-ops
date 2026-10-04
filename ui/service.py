@@ -10,6 +10,7 @@ from llm import memory
 from llm.client import LLMTimeout
 from engine import EngineError, SkillEngine, SkillValidationError
 from engine import executor
+from engine.simulator import SimulatorError, normalize_simulator_target
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -180,8 +181,15 @@ class Operations:
         if mode not in {"real", "simulation"}:
             raise APIError("execution_mode 只允许 real 或 simulation")
         target = payload.get("target") or {"kind": "local", "display_name": "localhost"}
-        if not isinstance(target, dict) or target.get("kind") != "local":
-            raise APIError("P0 只允许受控本机目标")
+        if not isinstance(target, dict) or target.get("kind") not in {"local", "simulator"}:
+            raise APIError("目标类型只允许 local 或 simulator")
+        if target["kind"] == "simulator":
+            if mode != "simulation":
+                raise APIError("交换机模拟器必须使用 simulation 执行模式")
+            try:
+                target = normalize_simulator_target(target)
+            except SimulatorError as exc:
+                raise APIError(str(exc), exc.code, exc.status) from exc
         if skill_id:
             try:
                 self.engine.loader.load(skill_id)

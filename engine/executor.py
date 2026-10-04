@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shlex
@@ -20,6 +21,7 @@ from pathlib import Path
 from typing import Callable
 
 import yaml
+from .simulator import SimulatorClient, SimulatorError
 
 WHITELIST_PATH = Path(__file__).with_name("whitelist.yaml")
 REJECTED_TEXT = "该命令不在白名单，已拒绝"
@@ -112,7 +114,6 @@ def _decode(data: bytes) -> str:
             continue
     return data.decode("utf-8", errors="replace")
 
-
 def _subprocess_runner(args: list[str], timeout: float) -> tuple[int, bytes]:
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     result = subprocess.run(args, shell=False, capture_output=True, timeout=timeout, creationflags=flags)
@@ -203,3 +204,29 @@ def execute(command: str, target: str = "local", timeout: float = DEFAULT_TIMEOU
     output = raw if status != "timeout" else (raw + f"\n（超过 {timeout:g} 秒，已停止）").strip()
     return {"cmd": command, "status": status, "duration": round(time.monotonic() - started, 2),
             "output": output or "（无输出）", "raw": raw, "mode": "live", "replay_source": None}
+
+
+def execute_simulator(command: str, device: str | None, client: SimulatorClient,
+                      action: str = "command") -> dict:
+    """Execute one validated read-only operation through the loopback simulator API."""
+    started = time.monotonic()
+    mapping = {"action": action}
+    if action == "command":
+        mapping.update(device=device, command=command)
+    try:
+        response = client.execute(mapping)
+        raw = response["output"].replace("\r\n", "\n").strip()
+        if len(raw.encode("utf-8")) > OUTPUT_LIMIT:
+            raw = raw.encode("utf-8")[:OUTPUT_LIMIT].decode("utf-8", errors="ignore") + "\n…（输出过长，已截断）"
+        status = "success" if response["ok"] else "failed"
+        display = f"{response['device']}> {response['command']}" if response["device"] else f"simulator:{action}"
+        return {"cmd": display, "status": status, "duration": round(time.monotonic() - started, 2),
+                "output": raw or "（无输出）", "raw": raw, "mode": "simulator", "replay_source": None,
+                "simulator": {"epoch": client.epoch, "device": response["device"],
+                              "revision": response["revision"], "mutation": False}}
+    except SimulatorError as exc:
+        return {"cmd": f"{device}> {command}" if device else f"simulator:{action}", "status": "failed",
+                "duration": round(time.monotonic() - started, 2), "output": str(exc), "raw": "",
+                "mode": "simulator", "replay_source": None,
+                "simulator": {"epoch": client.epoch, "device": device, "revision": None, "mutation": False,
+                              "error_code": exc.code}}

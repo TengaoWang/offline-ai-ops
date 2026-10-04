@@ -16,6 +16,7 @@ from llm.cite import cite
 
 from . import executor, judge, rules
 from .loader import SKILLS_DIR, load_skill
+from .simulator import SimulatorClient
 
 COLLECT_BUDGET = 30  # 秒，FR-3：30 秒内完成全部采集
 SEVERITY_ORDER = {"critical": 0, "warning": 1, "ok": 2}
@@ -61,7 +62,8 @@ def _pick_command(item: dict, replay_only: bool = False) -> tuple[str | None, st
     return None, "local"
 
 
-def _collect(skill: dict, runner=None, overrides: dict | None = None, replay_only: bool = False) -> Iterator[dict]:
+def _collect(skill: dict, runner=None, overrides: dict | None = None, replay_only: bool = False,
+             simulator_client: SimulatorClient | None = None) -> Iterator[dict]:
     """按顺序执行采集命令，每条执行完就产出结果。"""
     collect = skill["collect"]
     timeout = float(collect.get("timeout", executor.DEFAULT_TIMEOUT))
@@ -76,6 +78,11 @@ def _collect(skill: dict, runner=None, overrides: dict | None = None, replay_onl
         if time.monotonic() - started > COLLECT_BUDGET:
             result = {"cmd": command, "status": "timeout", "duration": 0.0, "raw": "", "mode": "skipped",
                       "output": f"超出 {COLLECT_BUDGET} 秒采集时限，未执行", "replay_source": None}
+        elif target == "simulator":
+            if simulator_client is None:
+                raise ValueError("模拟器命令缺少已连接的模拟器目标")
+            result = executor.execute_simulator(command, item.get("device"), simulator_client,
+                                                action=item.get("action", "command"))
         else:
             remaining = max(1.0, COLLECT_BUDGET - (time.monotonic() - started))
             result = executor.execute(command, target=target, timeout=min(timeout, remaining),
@@ -110,7 +117,8 @@ def _finding(skill: dict, finding_id: str, rule_path: list[str], values: dict) -
 
 
 def run_skill(skill_id: str, skills_dir: Path | str | None = None, runner=None, use_ai: bool = True,
-              overrides: dict | None = None, replay_only: bool = False) -> Iterator[tuple[str, dict]]:
+              overrides: dict | None = None, replay_only: bool = False,
+              simulator_client: SimulatorClient | None = None) -> Iterator[tuple[str, dict]]:
     """执行一个技能，逐步产出 (事件名, 数据)。技能不存在或格式错误时抛出 ValueError。
 
     overrides：覆盖 collect.yaml 里的变量，例如 {"target": "192.168.10.20"}；只接受该技能定义过的变量。
@@ -125,7 +133,7 @@ def run_skill(skill_id: str, skills_dir: Path | str | None = None, runner=None, 
     commands, results = [], {}
     allowed = (skill["collect"].get("vars") or {}).keys()
     overrides = {k: str(v) for k, v in (overrides or {}).items() if k in allowed and v not in (None, "")}
-    for index, result in enumerate(_collect(skill, runner, overrides, replay_only), 1):
+    for index, result in enumerate(_collect(skill, runner, overrides, replay_only, simulator_client), 1):
         commands.append(result)
         results[result["id"]] = result
         yield "collect", {"index": index, **result}

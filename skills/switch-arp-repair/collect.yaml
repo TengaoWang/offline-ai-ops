@@ -1,0 +1,15 @@
+targets: [simulator]
+timeout: 15
+commands:
+  - id: confirm-fault
+    target: simulator
+    action: diagnose
+    run: diagnose
+  - id: apply-arp-repair
+    target: simulator
+    action: repair-arp
+    run: repair-arp
+  - id: verify
+    target: simulator
+    action: probe
+    run: probe

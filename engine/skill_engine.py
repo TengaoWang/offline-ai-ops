@@ -19,6 +19,7 @@ from . import skillgen
 from .loader import list_skills as _list_skills
 from .loader import load_skill
 from .runner import run_skill
+from .simulator import SimulatorClient, SimulatorError, normalize_simulator_target
 
 SAFE_ID = re.compile(r"^[a-z0-9][a-z0-9_-]{1,63}$")
 
@@ -60,7 +61,8 @@ def _card(skill: dict) -> dict:
     commands = skill["collect"].get("commands") or [] if skill["valid"] else []
     return {"id": skill["id"], "name": skill["name"], "description": skill["description"] or "本地只读排障技能",
             "command_count": len(commands), "source": "skills/", "valid": skill["valid"],
-            "errors": skill["errors"], "demo_ready": skill["valid"]}
+            "errors": skill["errors"], "demo_ready": skill["valid"],
+            "targets": skill["collect"].get("targets", ["local"]) if skill["valid"] else []}
 
 
 def _command(item: dict) -> dict:
@@ -88,19 +90,38 @@ class SkillEngine:
         if mode not in {"real", "simulation"}:
             raise EngineError("执行模式只允许 real 或 simulation", "invalid_mode")
         target = target or {"kind": "local", "display_name": "localhost"}
-        if target.get("kind") != "local":
-            raise EngineError("只允许受控本机目标", "invalid_target")
         try:
-            self.loader.load(skill_id)
+            package = self.loader.load(skill_id)
         except SkillValidationError as exc:
             raise EngineError("；".join(exc.errors), "invalid_skill") from exc
+        if not isinstance(target, dict) or target.get("kind") not in {"local", "simulator"}:
+            raise EngineError("目标类型只允许 local 或 simulator", "invalid_target")
+        if target["kind"] == "simulator":
+            if mode != "simulation":
+                raise EngineError("交换机模拟器必须标记为 simulation", "invalid_mode")
+            try:
+                target = normalize_simulator_target(target)
+            except SimulatorError as exc:
+                raise EngineError(str(exc), exc.code, exc.status) from exc
+        supported_targets = package["collect"].get("targets", ["local"])
+        if target["kind"] not in supported_targets:
+            raise EngineError(f"技能 {skill_id} 不支持目标 {target['kind']}", "invalid_target")
         run_id = run_id or ("run-" + uuid.uuid4().hex)
+        simulator_client = None
+        if target["kind"] == "simulator":
+            simulator_client = SimulatorClient(target, run_id)
+            try:
+                simulator_client.prepare()
+            except SimulatorError as exc:
+                raise EngineError(str(exc), exc.code, exc.status) from exc
         send = emit or (lambda *_: None)
         started = time.perf_counter()
         collected_at = analysed_at = None
         result: dict = {}
         for event, data in run_skill(skill_id, skills_dir=self.skills_root, use_ai=enable_ai,
-                                     overrides=overrides, replay_only=mode == "simulation"):
+                                     overrides=overrides,
+                                     replay_only=mode == "simulation" and target["kind"] == "local",
+                                     simulator_client=simulator_client):
             if event == "start":
                 send("start", data | {"run_id": run_id, "skill": skill_id, "execution_mode": mode,
                                       "target": target, "simulation": mode == "simulation"})

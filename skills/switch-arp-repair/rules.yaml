@@ -1,0 +1,22 @@
+start: repaired
+rules:
+  - id: repaired
+    label: 静态 ARP 更新后全路径复检通过
+    check: {cmd: apply-arp-repair, regex: '"repaired"\s*:\s*true'}
+    hit: {branch: 静态 ARP 已修复, finding: repaired, next: end}
+    miss: {branch: 当前场景不适用或复检失败, finding: not-repaired, next: end}
+findings:
+  repaired:
+    severity: ok
+    title: 故障已解决：静态 ARP 绑定更新完成
+    symptom: 助手更新两端静态 ARP 后，端到端复检通过。
+    root_cause: 设备更换后遗留的旧 MAC 绑定已替换为当前对端 MAC。
+    fix_commands: [自动执行记录已显示在采集过程]
+    refs: [arp]
+  not-repaired:
+    severity: warning
+    title: 静态 ARP 修复技能未执行或复检未通过
+    symptom: 当前场景不是 D，或者自动修复后仍存在故障。
+    root_cause: 需要重新选择场景 D 并先完成一键体检。
+    fix_commands: [重新选择场景 D]
+    refs: [arp]

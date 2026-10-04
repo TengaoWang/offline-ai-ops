@@ -16,9 +16,11 @@ from pathlib import Path
 
 import yaml
 
+from .simulator import SimulatorError, validate_simulator_mapping
+
 ROOT = Path(__file__).resolve().parent.parent
 SKILLS_DIR = ROOT / "skills"
-TARGETS = {"local", "local_mac", "switch"}
+TARGETS = {"local", "local_mac", "switch", "simulator"}
 
 
 def _read_yaml(path: Path, errors: list[str]) -> dict:
@@ -61,6 +63,12 @@ def _read_markdown(path: Path) -> tuple[str | None, str]:
 
 def _validate(skill: dict) -> list[str]:
     errors: list[str] = []
+    supported_targets = skill["collect"].get("targets", ["local"])
+    if (not isinstance(supported_targets, list) or not supported_targets
+            or not all(isinstance(target, str) and target in {"local", "simulator"}
+                       for target in supported_targets)
+            or len(supported_targets) != len(set(supported_targets))):
+        errors.append("collect.yaml targets 只允许不重复的 local/simulator")
     commands = skill["collect"].get("commands")
     if not isinstance(commands, list) or not commands:
         return ["collect.yaml 里没有命令"]
@@ -68,10 +76,17 @@ def _validate(skill: dict) -> list[str]:
     for item in commands:
         if not isinstance(item, dict) or "id" not in item or "run" not in item:
             return ["collect.yaml 是旧格式：每条命令需要 id 和 run"]
-        if item.get("target", "local") not in TARGETS:
-            errors.append(f"命令 {item['id']} 的 target 只能是 local、local_mac 或 switch")
+        target = item.get("target", "local")
+        if target not in TARGETS:
+            errors.append(f"命令 {item['id']} 的 target 只能是 local、local_mac、switch 或 simulator")
         if isinstance(item["run"], dict) and not set(item["run"]) <= {"windows", "mac"}:
             errors.append(f"命令 {item['id']} 的 run 只能按 windows / mac 分别写")
+        if target == "simulator":
+            try:
+                validate_simulator_mapping({"action": item.get("action", "command"),
+                                            "device": item.get("device"), "command": item["run"]})
+            except SimulatorError as exc:
+                errors.append(f"命令 {item['id']}：{exc}")
         ids.add(item["id"])
 
     tree = skill["rules"]

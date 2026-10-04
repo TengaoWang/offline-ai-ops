@@ -191,6 +191,7 @@ Windows 上把命令里的 `.venv/bin/python` 换成 `.venv\Scripts\python`。
 没有模型时可以先用 mock 模式开发界面：`LLM_MOCK=1 .venv/bin/python -m llm ask "随便问"`。
 接口的参数、返回格式和配置见 [`llm/README.md`](llm/README.md)。
 
+如需连接仓库配套的交换机实验程序，先运行 `switch-lab.exe --port 8878`，再在技能库中选择“交换机实验连通性诊断”。助手后端会通过 `http://127.0.0.1:8878/api/v1` 读取实验状态并执行五项只读采集；页面会持续标记为 `simulation`。接口、安全边界和错误恢复见 [`docs/switch-lab-integration.md`](docs/switch-lab-integration.md) 与 [`docs/operations-runbook.md`](docs/operations-runbook.md)。
 ## 便携离线包
 
 仓库提供 macOS/Windows 启动器，以及 Ollama/llama.cpp 两种后端的无下载组装和 SHA-256 校验脚本。构建过程必须显式传入已准备好的对应平台 Python 运行时、模型后端、模型和已发布知识库：

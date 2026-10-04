@@ -10,6 +10,8 @@ kb/index.db
 # 厂商手册有版权限制（不得复制传播），不进 git，放 SSD 或线下传递
 kb/docs/*
 !kb/docs/.gitkeep
+switch_demo_v2/assets/*.pdf
+switch_demo_v2/assets/manual-pages/*.png
 # 测试用 PDF 由 tests/make_fixture.py 生成
 tests/fixtures/
 kb/index.db-journal
@@ -22,11 +24,13 @@ kb/revisions/
 kb/current.json
 kb/.current-*.json
 runtime/
-
 # 长期记忆（本机数据，不进 git）
 kb/memory.db
 kb/memory/
-
 # 便携构建临时目录与 IDE 配置
 .tmp-portable/
 .idea/
+# Local console captures and copied/running eNSP lab (may contain device configs)
+ensp-runtime/
+# 本地生成的便携演示包（含厂商手册）
+dist/

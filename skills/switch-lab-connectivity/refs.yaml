@@ -1,0 +1,19 @@
+refs:
+  ping:
+    sections: ["15.2"]
+    query: Ping 不通故障定位
+  port-down:
+    sections: ["8.2"]
+    query: 接口物理 DOWN 故障定位
+  vlan:
+    sections: ["22.53.3.2", "15.2.2"]
+    query: 接口加入 VLAN access 缺省 VLAN
+  route:
+    sections: ["21.7.4.14"]
+    query: IP 路由表故障定位
+  arp:
+    sections: ["15.3.2"]
+    query: 错误静态 ARP 表项设备更换
+  physical-link:
+    sections: ["8.2", "15.2.3"]
+    query: 接口物理 DOWN 光纤光模块链路检查
