@@ -492,7 +492,7 @@ function renderHealth(health) {
     statusChip("模型", true, "Mock"),
     statusChip("索引", health.index, health.index ? "已建" : "未建"),
   ].join("") : [
-    statusChip("Ollama", health.ollama),
+    statusChip(health.backend === "llama.cpp" ? "llama.cpp" : "Ollama", health.backend_ready),
     statusChip("模型", modelReady),
     statusChip("索引", health.index),
   ].join("");
