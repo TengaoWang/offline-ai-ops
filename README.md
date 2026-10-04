@@ -7,6 +7,7 @@ GGboys · HacKU 2026 · Deep Technology Problem Statement 4（The Capability Tha
 还能在手册里检索依据、带出处回答问题，并记住现场信息和以前的排查经历。模型与知识库全部在本机运行。
 
 **怎么用：看 [`docs/usage.md`](docs/usage.md)（使用说明，含演示前检查）。**
+**工作报告：[`docs/report.md`](docs/report.md)（完成情况、架构、测试结果、已知问题）。**
 
 ## 目录
 
