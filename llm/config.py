@@ -9,6 +9,9 @@ ROOT = Path(__file__).resolve().parent.parent
 if ROOT.name == "app" and (ROOT.parent / "kb").is_dir():
     ROOT = ROOT.parent
 
+# 前端会话 / 证据 / 技能回放等用户数据落在 U 盘 data/ 目录（数据不出盒）
+DATA_DIR = Path(os.environ.get("OFFLINE_AI_OPS_DATA", ROOT / "data"))
+
 # Ollama 地址与模型
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST_URL", "http://127.0.0.1:11434")
 LLAMA_CPP_CHAT_HOST = os.environ.get("LLAMA_CPP_CHAT_HOST", "http://127.0.0.1:8080")

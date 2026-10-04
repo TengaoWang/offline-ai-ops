@@ -10,7 +10,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
-APP_ITEMS = ("engine", "llm", "ui", "skills", "docs", "scripts", "requirements.txt", "README.md")
+APP_ITEMS = ("engine", "llm", "ui", "skills", "docs", "scripts", "requirements.txt", "README.md",
+             "switch_demo_v2", "ensp", "labs")
 
 
 def sha256(path: Path) -> str:

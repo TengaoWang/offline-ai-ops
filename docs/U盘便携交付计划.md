@@ -107,11 +107,11 @@ F:\GGboys\
 - 干净机器非管理员、无任何依赖即可运行。
 - verify_portable.py 完整性校验通过；模型 / KB / 后端三件资产 SHA-256 与清单一致。
 
-## 9. 需先拍板的决策
+## 9. 范围决策（已确认 2026-10-04）
 
-1. 后端：是否默认只交付 llama.cpp 零安装版（推荐），Ollama 版仅备选？
-2. 模型：目标机按 8 GB CPU-only 设计用 qwen3:4b，还是维持 qwen3:8b（本机已就绪）？
-3. 手册：现在是否已有可发布的真实华为 S5700 手册？若无，先用测试手册跑通 T0-4 → T2 全链路，再替换真实手册？
+1. 平台：**仅交付 Windows 版（Win × llama.cpp）**。macOS 与 Ollama 版按范围豁免，不再作为本次交付项；FR-10 的验收口径以本决策为准。
+2. 模型：维持 qwen3:8b（本机已就绪）；若 8 GB CPU-only 目标机实测超时/OOM，再切 qwen3:4b 并重跑 eval。
+3. 手册：真实华为 S5700 手册受版权限制未入库，先用测试手册跑通链路，拿到手册后重新发布 KB。
 
 ## 9.1 开发提交时的 U 盘兼容要求（给全体开发者）
 
@@ -121,7 +121,7 @@ F:\GGboys\
 2. **保持离线**：任何功能不得在启动或运行期访问外网；新增代码不得引入需要联网的调用。
 3. **依赖进 requirements.txt**：便携 Python 只预装了 `requirements.txt` 里的包。新增第三方依赖必须同步加进去，否则 U 盘上跑不起来；且必须是 3.12 有预编译 wheel 的纯/稳定包。
 4. **兼容 Python 3.12**：便携运行时是 3.12，避免使用更新版本才有的语法/API（`hashlib.file_digest` 这类 3.11+ 的可用）。
-5. **跨平台**：目标机含 Windows 与 macOS，注意 `os.name` 差异（如 Windows 下只读文件不能 `os.fsync`）、用 `pathlib` 处理分隔符。
+5. **跨平台**：本次只交付 Windows，但仍保持代码可移植（`os.name` 判断、`pathlib` 处理分隔符），不写死平台假设。
 6. **新增顶层模块要登记**：若新增 `engine/`、`llm/`、`ui/` 之外的新顶层 Python 包，必须同步加进 `scripts/build_portable.py` 的 `APP_ITEMS`，否则不会被装进 U 盘。
 7. **大文件不进 git**：模型、GGUF、便携 Python、后端二进制、KB 快照一律线下传递，不进 git；代码里引用它们用 `config.ROOT` 相对定位。
 8. **改启动脚本守约**：改 `scripts/start_windows.ps1` / `start_macos.command` 时，保持只绑定 `127.0.0.1`、不下载、不装依赖；llama-server 的 `--alias` 必须与实际模型名一致。
@@ -138,10 +138,11 @@ F:\GGboys\
   3. `llm/config.py`：打包后 `ROOT` 指向 `app/`，KB 默认路径算错 → 加 `app` 目录检测抬升到 U 盘根。
   4. `scripts/start_windows.ps1` / `start_macos.command`：llama-server `--alias qwen3:4b` 与实际模型 8b 不一致 → 统一为 `qwen3:8b`。
 - 当前 KB 用的是测试手册（真实华为 S5700 手册受版权限制，暂未入库）。
+- P0-1 修复（数据不出盒）：前端会话 / Evidence / 技能回放原存浏览器 localStorage，现改为经 `/api/state` 落到 U 盘 `data/` 目录（后端 `config.DATA_DIR` + `ui/service.py` 读写 + `ui/static/app.js` 改用 fetch），`data/` 已加入 `.gitignore`。
 
 ## 11. 仍待完成
 
 - 替换真实华为 S5700 手册后重新发布 KB 并重新打包。
-- 干净 Windows 10+ / macOS 12+ × llama.cpp（及可选 Ollama）四组无网、非管理员、U 盘路径启动记录（FR-10）。
+- 干净 Windows 10+ × llama.cpp 无网、非管理员、U 盘路径启动记录（FR-10，仅 Win）。
 - 8 GB CPU-only 目标机的质量与「单轮 ≤ 30 秒」复验；若换 `qwen3:4b`，必须重跑 `eval/eval_p0_quality.py`。
-- 1 个无效技能包（`saved-*` 沉淀技能之一）待修正或移除。
+- P0-1 修复已实现并本地验证，待重新打包到 U 盘后做一轮回归验证。

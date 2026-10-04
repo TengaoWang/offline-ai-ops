@@ -161,6 +161,8 @@ class UIHandler(BaseHTTPRequestHandler):
                 self._send_json({"samples": index_samples()})
             elif parsed.path == "/api/memory":
                 self._send_json(operations.list_memories())
+            elif parsed.path == "/api/state":
+                self._send_json(operations.load_state())
             elif parsed.path.startswith("/api/manuals/jobs/"):
                 self._send_json(operations.job(parsed.path.rsplit("/", 1)[-1]))
             elif parsed.path.startswith("/api/diagnose/runs/") and parsed.path.endswith("/events"):
@@ -196,6 +198,8 @@ class UIHandler(BaseHTTPRequestHandler):
                 self._send_json(operations.start_build(self._read_json_body()), status=202)
             elif parsed.path == "/api/simulator/check":
                 self._send_json(operations.simulator_check(self._read_json_body()))
+            elif parsed.path == "/api/state":
+                self._send_json(operations.save_state(self._read_json_body()))
             elif parsed.path in {"/api/skills/save", "/api/save-skill"}:
                 self._handle_save_skill()
             else:

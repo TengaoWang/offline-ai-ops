@@ -1,5 +1,7 @@
 """One process, one bounded operation. No queue, retry, or hidden demo fallback."""
 from pathlib import Path
+import json
+import os
 import threading
 import time
 import uuid
@@ -10,7 +12,6 @@ from llm import memory
 from llm.client import LLMTimeout
 from engine import EngineError, SkillEngine, SkillValidationError
 from engine import executor
-from engine.simulator import SimulatorError, normalize_simulator_target
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -121,6 +122,38 @@ class Operations:
         return {"memories": items, "facts_count": sum(x["kind"] == "fact" for x in items),
                 "episodes_count": sum(x["kind"] == "episode" for x in items)}
 
+    def load_state(self):
+        """读取前端会话 / 证据 / 技能回放，全部落在 U 盘 data/ 目录。"""
+        result = {}
+        for key, filename in (("conversations", "conversations.json"),
+                              ("evidence", "evidence.json"),
+                              ("skillReplays", "skill-replays.json")):
+            path = config.DATA_DIR / filename
+            try:
+                result[key] = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                result[key] = None
+        return result
+
+    def save_state(self, payload):
+        """保存前端会话 / 证据 / 技能回放到 U 盘 data/ 目录（原子写入）。"""
+        if not isinstance(payload, dict):
+            raise APIError("请求必须是 JSON 对象")
+        config.DATA_DIR.mkdir(parents=True, exist_ok=True)
+        for key, filename in (("conversations", "conversations.json"),
+                              ("evidence", "evidence.json"),
+                              ("skillReplays", "skill-replays.json")):
+            if key not in payload:
+                continue
+            value = payload[key]
+            if value is None:
+                continue
+            target = config.DATA_DIR / filename
+            temporary = target.with_suffix(target.suffix + ".tmp")
+            temporary.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
+            os.replace(temporary, target)
+        return {"ok": True}
+
     def forget_memory(self, identifier):
         try:
             memory_id = int(identifier)
@@ -183,13 +216,6 @@ class Operations:
         target = payload.get("target") or {"kind": "local", "display_name": "localhost"}
         if not isinstance(target, dict) or target.get("kind") not in {"local", "simulator"}:
             raise APIError("目标类型只允许 local 或 simulator")
-        if target["kind"] == "simulator":
-            if mode != "simulation":
-                raise APIError("交换机模拟器必须使用 simulation 执行模式")
-            try:
-                target = normalize_simulator_target(target)
-            except SimulatorError as exc:
-                raise APIError(str(exc), exc.code, exc.status) from exc
         if skill_id:
             try:
                 self.engine.loader.load(skill_id)

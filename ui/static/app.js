@@ -651,16 +651,21 @@ function activeConversation() {
   return state.conversations.find((conversation) => conversation.id === state.activeConversationId) || null;
 }
 
+function saveServerState(partial) {
+  fetch("/api/state", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(partial),
+  }).catch(() => { /* 服务端暂不可用时保持当前页面可用 */ });
+}
+
 function storeConversations() {
-  try {
-    localStorage.setItem(CONVERSATION_STORAGE_KEY, JSON.stringify({
+  saveServerState({
+    conversations: {
       activeConversationId: state.activeConversationId,
       conversations: state.conversations,
-    }));
-  } catch (error) {
-    const note = $("#sidebarFootnote");
-    if (note) note.textContent = "本机存储空间不足，当前会话尚未保存";
-  }
+    },
+  });
 }
 
 function sourceLocaleConversationHtml() {
@@ -678,48 +683,33 @@ function sourceLocaleConversationHtml() {
   return root.innerHTML;
 }
 
-function loadEvidenceInputs() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(EVIDENCE_STORAGE_KEY) || "null");
-    if (!saved || typeof saved !== "object") return;
-    if (saved.manualMinutes != null) $("#manualMinutes").value = saved.manualMinutes;
-    if (saved.manualSteps != null) $("#manualSteps").value = saved.manualSteps;
-    if (saved.manualLookups != null) $("#manualLookups").value = saved.manualLookups;
-    if (saved.manualNotes != null) $("#manualNotes").value = saved.manualNotes;
-  } catch (error) {
-    // The form falls back to its documented comparison baseline.
-  }
+function loadEvidenceInputs(data) {
+  const saved = data && data.evidence ? data.evidence : null;
+  if (!saved || typeof saved !== "object") return;
+  if (saved.manualMinutes != null) $("#manualMinutes").value = saved.manualMinutes;
+  if (saved.manualSteps != null) $("#manualSteps").value = saved.manualSteps;
+  if (saved.manualLookups != null) $("#manualLookups").value = saved.manualLookups;
+  if (saved.manualNotes != null) $("#manualNotes").value = saved.manualNotes;
 }
 
 function storeEvidenceInputs() {
-  try {
-    localStorage.setItem(EVIDENCE_STORAGE_KEY, JSON.stringify({
+  saveServerState({
+    evidence: {
       manualMinutes: $("#manualMinutes").value,
       manualSteps: $("#manualSteps").value,
       manualLookups: $("#manualLookups").value,
       manualNotes: $("#manualNotes").value,
-    }));
-  } catch (error) {
-    // Evidence remains usable for the current page even if local storage is unavailable.
-  }
+    },
+  });
 }
 
-function loadSkillReplays() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(SKILL_REPLAY_STORAGE_KEY) || "{}");
-    state.skillReplays = saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
-  } catch (error) {
-    state.skillReplays = {};
-  }
+function loadSkillReplays(data) {
+  const saved = data && data.skillReplays ? data.skillReplays : null;
+  state.skillReplays = saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
 }
 
 function storeSkillReplays() {
-  try {
-    localStorage.setItem(SKILL_REPLAY_STORAGE_KEY, JSON.stringify(state.skillReplays));
-  } catch (error) {
-    const note = $("#sidebarFootnote");
-    if (note) note.textContent = "技能回放未能保存在本机浏览器";
-  }
+  saveServerState({ skillReplays: state.skillReplays });
 }
 
 function conversationTime(timestamp) {
@@ -936,15 +926,13 @@ function saveConversationRename(event) {
   $("#conversationRenameDialog").close();
 }
 
-function loadConversations() {
+function loadConversations(data) {
   state.welcomeHtml = $("#chatFeed").innerHTML;
-  try {
-    const saved = JSON.parse(localStorage.getItem(CONVERSATION_STORAGE_KEY) || "null");
-    if (saved && Array.isArray(saved.conversations)) {
-      state.conversations = saved.conversations.filter((item) => item && typeof item.id === "string" && typeof item.title === "string");
-      state.activeConversationId = saved.activeConversationId;
-    }
-  } catch (error) {
+  const saved = data && data.conversations ? data.conversations : null;
+  if (saved && Array.isArray(saved.conversations)) {
+    state.conversations = saved.conversations.filter((item) => item && typeof item.id === "string" && typeof item.title === "string");
+    state.activeConversationId = saved.activeConversationId;
+  } else {
     state.conversations = [];
   }
   if (!state.conversations.length) state.conversations.push(makeConversation());
@@ -952,7 +940,6 @@ function loadConversations() {
     state.activeConversationId = state.conversations.slice().sort((a, b) => b.updatedAt - a.updatedAt)[0].id;
   }
   renderActiveConversation();
-  storeConversations();
 }
 
 function scrollChatToBottom() {
@@ -1779,6 +1766,19 @@ function bindEvents() {
   });
 }
 
+async function restoreServerState() {
+  let data = null;
+  try {
+    const response = await fetch("/api/state");
+    if (response.ok) data = await response.json();
+  } catch (error) {
+    data = null;
+  }
+  loadConversations(data);
+  loadEvidenceInputs(data);
+  loadSkillReplays(data);
+}
+
 async function init() {
   if (window.location.protocol === "file:") {
     const notice = $("#directOpenNotice");
@@ -1788,9 +1788,7 @@ async function init() {
   }
   try { state.locale = localStorage.getItem(LANGUAGE_STORAGE_KEY) === "en" ? "en" : "zh-CN"; } catch (error) { state.locale = "zh-CN"; }
   bindEvents();
-  loadConversations();
-  loadEvidenceInputs();
-  loadSkillReplays();
+  await restoreServerState();
   generateEvidence();
   renderSamples([]);
   localizePage();
