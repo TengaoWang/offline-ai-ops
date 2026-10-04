@@ -4,7 +4,7 @@
 
 两种用法：
 - **对话里**：`python -m llm answer` 里说「MES 服务器连不上了，帮我查一下」，本地 AI 会选技能、从长期记忆里取参数、执行并总结（见 [`llm/README.md`](../llm/README.md)）。
-- **界面一键体检**：`ui/` 还没有接，接法见 [`docs/frontend-answer.md`](../docs/frontend-answer.md) 第 11 节。
+- **界面一键体检**：`ui/service.py` 通过 `engine.SkillEngine`（`skill_engine.py`，需求文档 §6.1 的接口）调用本引擎；界面的「模拟」模式对应全部读回放。
 
 | 需求 | 实现 |
 |---|---|
@@ -15,6 +15,7 @@
 | FR-6 分级报告 | `runner.py`：严重 / 警告 / 正常，每条有现象、根因、修复指令（只作建议，不执行） |
 | FR-7 强制溯源 | `llm/cite.py`：`refs.yaml` 只写章节号，页码和标题从手册索引里查；查不到显示「手册中未找到依据」 |
 | FR-8 沉淀技能 | `skillgen.py`：把一次执行结果存成新技能目录，可以直接执行 |
+| 界面接口 | `skill_engine.py`：`SkillEngine.list_skills()` / `run(skill_id, mode="real"\|"simulation")` / `save_skill(run, name)`，供 `ui/service.py` 调用 |
 | FR-9 白名单 | `executor.py` + `whitelist.yaml`：危险字符 → 拆参数 → 白名单 → 不经过 shell 执行 |
 
 ## 命令行
@@ -109,5 +110,5 @@ refs:
 - **还没在 Windows 上真实跑过**（macOS 上已真实执行验证，单元测试用假的执行函数）。中文 / 英文 Windows 的 `ping`、`ipconfig` 输出规则都按 `TTL=`、`IPv4`、`默认网关|Default Gateway` 匹配，需要在演示机上确认。
 - 交换机侧全部是回放。回放来自手册示例，为演示场景改过的字段都在文件第一行写明。
 - AI 补充判定每次约 20 到 30 秒（qwen3:8b）；AI 给出的修复命令没有像 `ask()` 那样逐条核对手册原文。
-- 界面还没有接引擎（`ui/` 保持原样），接法见 `docs/frontend-answer.md` 第 11 节。
+- 和 Haward 原来的引擎相比：没有 findings 时不会把它藏进未完成项，而是标「手册中未找到依据」（FR-7 的要求），所以 `eval/eval_p0_diagnostics.py` 的「全部结论都有出处」一项会不通过。
 - `route()` 的提示词还是按 Linux 服务器问题写的，技能改成交换机方向后需要同步修改。

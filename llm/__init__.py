@@ -20,7 +20,8 @@ __all__ = ["route", "retrieve", "ask", "answer", "answer_stream", "chat", "inges
            "NOT_FOUND", "LLMError", "cite"]
 
 
-def chat(messages: list[dict], schema: dict | None = None, think: bool = False) -> str:
+def chat(messages: list[dict], schema: dict | None = None, think: bool = False,
+         num_predict: int | None = None) -> str:
     """通用模型调用（例如规则树未覆盖时的「AI 补充推理」）。返回回复文本。
 
     messages: [{"role": "system"|"user"|"assistant", "content": "..."}]
@@ -29,33 +30,45 @@ def chat(messages: list[dict], schema: dict | None = None, think: bool = False) 
     """
     if config.MOCK:
         return '{"mock": true}' if schema else "[MOCK] 这是模拟回复。"
-    return _chat(messages, schema=schema, think=think)
+    return _chat(messages, schema=schema, think=think, num_predict=num_predict)
 
 
 def health() -> dict:
-    """检查各组件是否就绪：{"mock", "ollama", "model", "embed_model", "index", "chunks", "vectors"}。
-
-    embed_model：向量模型是否已下载；vectors：索引里有多少段算好了向量。
-    两者都正常时检索用 hybrid（BM25 + 向量），否则自动退回 BM25，效果会变差（口语问题尤其明显）。
-    """
-    status = {"mock": config.MOCK, "ollama": False, "model": False, "embed_model": False,
-              "index": config.INDEX_PATH.exists(), "chunks": 0, "vectors": 0}
+    """Runtime readiness, using the same immutable revision as retrieval."""
+    from . import kb
+    import sqlite3
+    status = {"mock": config.MOCK, "ollama": False, "backend_ready": False,
+              "embed_backend_ready": False, "model": False, "embed_model": False,
+              "index": False, "chunks": 0, "vectors": 0, "index_revision": None,
+              "model_name": config.MODEL, "manual_files": [], "errors": [],
+              "backend": config.BACKEND, "embed_backend": config.EMBED_BACKEND}
     try:
-        models = list_models()
-        status["ollama"] = True
-        names = {m.removesuffix(":latest") for m in models}
-        status["model"] = config.MODEL.removesuffix(":latest") in names
-        status["embed_model"] = bool(config.EMBED_MODEL) and config.EMBED_MODEL.removesuffix(":latest") in names
-    except Exception:
-        pass
-    if status["index"]:
-        import sqlite3
-
-        with sqlite3.connect(config.INDEX_PATH) as db:
+        models = {m.removesuffix(":latest") for m in list_models("chat")}
+        embed_models = {m.removesuffix(":latest") for m in list_models("embed")}
+        status.update(backend_ready=True, embed_backend_ready=True,
+                      ollama=config.BACKEND == "ollama",
+                      model=config.MODEL.removesuffix(":latest") in models,
+                      embed_model=bool(config.EMBED_MODEL) and config.EMBED_MODEL.removesuffix(":latest") in embed_models)
+    except Exception as exc:
+        status["errors"].append(str(exc))
+    try:
+        snapshot = kb.current()
+        path = kb.default_index()
+        status.update(index_path=str(path), docs_dir=str(snapshot["docs"] if snapshot else config.DOCS_DIR),
+                      index_revision=snapshot["revision"] if snapshot else None,
+                      manual_files=snapshot["manifest"]["files"] if snapshot else [
+                          {"name": p.name, "size": p.stat().st_size} for p in config.DOCS_DIR.glob("*") if p.is_file() and p.suffix.lower() in {".pdf", ".md", ".txt"}])
+        with sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True) as db:
             status["chunks"] = db.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+            db.execute("SELECT count(*) FROM fts").fetchone()
+            status["index"] = status["chunks"] > 0
             try:
-                status["vectors"] = db.execute("SELECT COUNT(*) FROM vectors WHERE model = ?",
-                                               (config.EMBED_MODEL,)).fetchone()[0]
-            except sqlite3.OperationalError:  # 旧索引没有 vectors 表
+                status["vectors"] = db.execute("SELECT COUNT(*) FROM vectors WHERE model=?", (config.EMBED_MODEL,)).fetchone()[0]
+            except sqlite3.OperationalError:
                 pass
+    except Exception as exc:
+        status["errors"].append(str(exc))
+    status["vector_ready"] = bool(status["index"] and status["embed_model"] and status["vectors"] == status["chunks"])
+    status["rag_ready"] = bool(status["backend_ready"] and status["model"] and status["index"])
+    status["retrieval_mode"] = config.RETRIEVE_MODE if status["vector_ready"] else "bm25"
     return status

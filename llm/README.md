@@ -1,6 +1,6 @@
 # llm：模型与知识库接口
 
-给引擎（Agent）、界面等模块调用的统一入口。全部在本机运行（Ollama + SQLite），准备完成后不需要联网。
+给引擎（Agent）、界面等模块调用的统一入口。全部在本机运行（Ollama 或 llama.cpp + SQLite），准备完成后不需要联网。
 
 ```python
 from llm import route, retrieve, ask, answer, chat, health
@@ -14,7 +14,7 @@ from llm import route, retrieve, ask, answer, chat, health
 | `answer(问题, history=None)` | **完整流程（新增，可选）**：先判断问题类型（打招呼 / 超出范围 / 太笼统 / 手册问题），手册问题先截取原文、再让模型整理回答；回答没通过核对就退回原文 | `{"question", "query", "action", "answer_type", "answer", "citations", "extract", "unsupported_commands", "latency_s"}` |
 | `cite(sections, query=None)` | **强制溯源（新增）**：手册章节号（如 `"8.2"`）→ 真实出处；章节号找不到时按 `query` 检索；都找不到返回 `[]`（显示「手册中未找到依据」） | `[{"label", "file", "page", "section", "text", "via"}]` |
 | `chat(messages, schema=None, think=False)` | 通用模型调用，例如规则树未覆盖时的「AI 补充推理」 | 回复文本（传 `schema` 时为 JSON 字符串） |
-| `health()` | 检查 Ollama、模型、向量模型、索引是否就绪 | `{"mock", "ollama", "model", "embed_model", "index", "chunks", "vectors"}` |
+| `health()` | 检查模型后端、模型、向量模型、索引和发布修订是否就绪 | `{"backend", "backend_ready", "model", "embed_model", "index", "index_revision", "chunks", "vectors"}` |
 
 ## 该用哪个
 
@@ -74,7 +74,7 @@ for question in ["s5700", "型号规格"]:
 - `ask` 的出处由程序根据检索结果生成，模型只负责选编号，所以页码和章节不会被编造。
   - `found` 为 `False` 时，`answer` 固定为「手册中未找到依据。」，`citations` 为空。
   - 回答里的每条命令都要能在出处原文里找到（忽略接口号、VLAN 号等数字），找不到就判定为没有依据；这些命令放在 `unsupported_commands` 里，方便排查。
-  - `k` 是检索的段数；交给模型前会补上同一小节的相邻段并合并，最多给模型 3 段（`rag.ASK_PASSAGES`）。
+  - `k` 是检索的段数；交给模型前会补上同一小节的相邻段并合并，最多给模型 2 段（`rag.ASK_PASSAGES`），以控制本地 CPU 时延。
 - `page` 是 PDF 阅读器里的页码（封面为第 1 页），不是手册页脚印的页码。来自 Markdown / TXT 的片段没有页码，`page` 为 `None`。
 - Ollama 没启动或模型没下载时，`route` / `ask` / `chat` 会抛出 `llm.LLMError`，界面可以捕获后提示用户。`retrieve` 在向量模型不可用时不报错，自动退回 BM25。
 
@@ -133,11 +133,18 @@ Windows PowerShell：`$env:LLM_MOCK="1"`。
 | `LLM_MODEL` | `qwen3:8b` | 回答用的模型；低配电脑可改为 `qwen3:4b` |
 | `LLM_EMBED_MODEL` | `bge-m3` | 向量模型；设为空字符串则只用 BM25 |
 | `LLM_RETRIEVE_MODE` | `hybrid` | `hybrid`（BM25 + 向量）/ `vector` / `bm25` |
+| `LLM_BACKEND` | `ollama` | 聊天后端：`ollama` / `llama.cpp` |
+| `LLM_EMBED_BACKEND` | 同 `LLM_BACKEND` | 向量后端：`ollama` / `llama.cpp` |
 | `OLLAMA_HOST_URL` | `http://127.0.0.1:11434` | Ollama 地址 |
+| `LLAMA_CPP_CHAT_HOST` | `http://127.0.0.1:8080` | llama.cpp OpenAI 兼容聊天地址 |
+| `LLAMA_CPP_EMBED_HOST` | `http://127.0.0.1:8081` | llama.cpp OpenAI 兼容向量地址 |
 | `LLM_DOCS_DIR` | `kb/docs` | 手册目录 |
 | `LLM_INDEX_PATH` | `kb/index.db` | 索引文件 |
 | `LLM_MOCK` | `0` | `1` 为 mock 模式 |
-| `LLM_TIMEOUT` | `120` | 单次请求超时（秒） |
+| `LLM_TIMEOUT` | `180` | 单次后端请求硬超时（秒）；不是 30 秒产品性能门禁 |
+| `LLM_NUM_PREDICT` | `512` | 通用模型调用的默认最大生成 token |
+| `LLM_QA_NUM_PREDICT` | `256` | 手册问答 JSON 最大生成 token，用于控制响应时延；提示词同时限制正文长度 |
+| `LLM_KEEP_ALIVE` | `15m` | Ollama 模型驻留时间 |
 
 ## 原理和改进记录
 
@@ -147,9 +154,9 @@ Windows PowerShell：`$env:LLM_MOCK="1"`。
 
 ## 目前的限制
 
-- `ask` 每次 15 到 50 秒（MacBook Air M4 16GB，qwen3:8b），还没有达到「每轮不超过 30 秒」。
+- 30 秒是浏览器提交到完整结果可见的产品门禁；`LLM_TIMEOUT` 只是防止后端永久挂起，不能用来证明性能达标。
 - 手册里没有的问题，`retrieve` 仍会返回最接近的几段（不会返回空）；拒答由 `ask` 里的模型和命令核对完成。检索阶段的拒答阈值还没做。
-- 命令核对只检查命令，不检查文字描述：回答里没有出处的文字建议（例如「去使能 STP」）查不出来。
+- 当前问答会核验引用编号与命令原文；普通文字结论仍需通过独立无答案题集和人工逐结论抽查控制，不能只看“有出处”。
 - 检索准确率是在调参用的同一批题上测的（36 题，没有独立的留出集），实际效果可能更低。
 - 8GB 内存 + qwen3:4b + bge-m3 同时运行的配置（需求文档的目标机器）还没有测过。
 - `route` 用的是基座模型 + 提示词，没有微调；评测结果见 [`eval/README.md`](../eval/README.md)。

@@ -76,7 +76,15 @@ open kb/memory                              # 打开记忆文件夹（Windows：
 - 每条记忆是 `kb/memory/` 里的一个 Markdown 文件，**可以直接改或删**，下次运行时自动同步。
 - 只存在本机，不进 git。想清空就删掉 `kb/memory.db` 和 `kb/memory/`。
 
-## 4. 直接执行技能（不经过对话）
+## 4. 网页界面
+
+```bash
+.venv/bin/python -m ui.server          # 打开 http://127.0.0.1:8765
+```
+
+界面的「一键体检」执行的就是下面这 4 个技能：「真实」模式下本机命令真实执行、交换机命令读回放；「模拟」模式全部读回放。启动脚本和便携包见 README 的启动说明（Haward 编写）。
+
+## 5. 直接执行技能（不经过对话）
 
 ```bash
 .venv/bin/python -m engine list                              # 列出技能
@@ -92,7 +100,7 @@ open kb/memory                              # 打开记忆文件夹（Windows：
 | `service-down` 交换机登录 | 管理地址 → STelnet → SSH 源接口 → VTY 用户数 | 🔴 STelnet 未开启，🟡 源接口为空 |
 | `log-audit` 日志审计 | 地址冲突 → 危险命令拦截；其余日志交给 AI | 🟡 地址冲突，🟡 TC 报文（AI），🟢 拦截生效 |
 
-## 5. 哪些是真实的，哪些是模拟的
+## 6. 哪些是真实的，哪些是模拟的
 
 | 内容 | 来源 |
 |---|---|
@@ -104,7 +112,7 @@ open kb/memory                              # 打开记忆文件夹（Windows：
 
 安全边界：只执行白名单里的只读命令；含 `;` `|` `&` 等字符的命令直接拒绝；会改配置的命令一律不执行。
 
-## 6. 演示前检查（在演示机上做）
+## 7. 演示前检查（在演示机上做）
 
 ```bash
 .venv/bin/python -m unittest discover -s tests           # 62 项应全部通过
@@ -128,7 +136,7 @@ $env:ENGINE_MODE="replay"          # Windows PowerShell
 
 也可以改要排查的地址：`OPS_TARGET`（目标）、`OPS_GATEWAY`（网关）、`OPS_PORT`（交换机端口）、`OPS_VLAN`（业务 VLAN），用法同上。
 
-## 7. 常见问题
+## 8. 常见问题
 
 | 现象 | 解决 |
 |---|---|
@@ -139,11 +147,11 @@ $env:ENGINE_MODE="replay"          # Windows PowerShell
 | Windows 上符号显示成问号 | 不影响使用；用 Windows Terminal 显示效果更好 |
 | 回答很慢 | 排查一次约 15 到 25 秒，查手册约 20 到 45 秒（MacBook Air M4，qwen3:8b） |
 
-## 8. 更多说明
+## 9. 更多说明
 
 | 文档 | 内容 |
 |---|---|
 | [`llm/README.md`](../llm/README.md) | 模型与知识库接口（`answer`、`ask`、`retrieve`、`cite`、记忆） |
 | [`engine/README.md`](../engine/README.md) | 技能引擎、技能包格式、怎么新增技能 |
-| [`frontend-answer.md`](frontend-answer.md) | 给前端同学：接口和接法（`ui/` 目前没接） |
+| [`frontend-answer.md`](frontend-answer.md) | 给前端同学：接口说明，以及和界面合并后的情况（第 11 节） |
 | [`skills-engine-plan.md`](skills-engine-plan.md) | 技能引擎技术方案 |

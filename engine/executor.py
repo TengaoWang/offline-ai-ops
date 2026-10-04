@@ -164,19 +164,20 @@ def read_replay(path: Path) -> tuple[str, str, str]:
 
 
 def execute(command: str, target: str = "local", timeout: float = DEFAULT_TIMEOUT,
-            replay: Path | None = None, runner: Runner | None = None) -> dict:
+            replay: Path | None = None, runner: Runner | None = None, force_replay: bool = False) -> dict:
     """执行一条命令，返回 {cmd, status, duration, output, raw, mode, replay_source}。
 
     status：success / failed / timeout / rejected。
     output：界面显示的内容（回放会在第一行标明「模拟回放」和来源）；raw：命令的原始输出，规则判定用它。
-    mode：live（真实执行）/ replay（读回放文件）/ rejected。"""
+    mode：live（真实执行）/ replay（读回放文件）/ rejected。
+    force_replay：这一次全部读回放（界面的「模拟」模式），不受 ENGINE_MODE 影响。"""
     started = time.monotonic()
     ok, reason = check(command, target)
     if not ok:
         return {"cmd": command, "status": "rejected", "duration": 0.0,
                 "output": f"{REJECTED_TEXT}（{reason}）", "raw": "", "mode": "rejected", "replay_source": None}
 
-    if not live_supported(target):
+    if force_replay or not live_supported(target):
         if replay is None or not replay.exists():
             return {"cmd": command, "status": "failed", "duration": 0.0,
                     "output": "没有可用的回放数据（未连接真实设备）", "raw": "", "mode": "replay", "replay_source": None}

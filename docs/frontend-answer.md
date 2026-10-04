@@ -4,7 +4,7 @@
 |---|---|
 | 写给 | 负责界面（`ui/`）的同学 |
 | 来自 | 陈文韬（模型与知识库 `llm/`） |
-| 日期 | 2026-10-03，10-04 更新（新增第 11 节：对话里排查和长期记忆、技能引擎的接口） |
+| 日期 | 2026-10-03，10-04 更新（第 11 节：和 Haward 的界面合并后的情况） |
 | 代码 | `answer()` 已合进 `main`（PR #3）；第 11 节的内容在 `dev-rag-v2` 分支，尚未合并 |
 
 ---
@@ -14,7 +14,7 @@
 - **现在的界面不用改，也不会坏。** `ui/server.py` 调用的 `ask()`、`route()`、`health()`、`chat()`、`ingest()` 都没变，`/api/ask` 返回的字段和以前完全一样（已启动界面服务实测过）。
 - **新增了一个可选接口 `answer()`**，比 `ask()` 体验更好。要不要换、什么时候换，由你决定。
 - 如果要换，后端只需在 `ui/server.py` 里加一个接口（约 10 行），前端按 `answer_type` 分几种情况显示即可。下面给了可以直接参考的代码。
-- **10-04 更新**：`answer()` 的对话里可以直接排查现场故障，并有长期记忆；新增了技能引擎的接口（一键体检可以接真实执行）。**`ui/` 一行没改，原有接口和字段都没删、没改名，只是新增**，详见文末第 11 节。
+- **10-04 更新**：一键体检已经用上陈文韬的技能和引擎（Haward 的界面不用改）；`answer()` 可选打开对话里排查和长期记忆。详见文末第 11 节。
 
 ## 2. `answer()` 比 `ask()` 好在哪
 
@@ -256,86 +256,32 @@ MacBook Air M4 16GB，qwen3:8b；有独立显卡的 Windows 电脑会快一些�
 - 技术路线（调度器、原文截取、审核的原理）：[`rag-plan.md`](rag-plan.md)
 - 交接说明：[`rag-handoff.md`](rag-handoff.md)
 
-## 11. 10-04 更新：新增的接口（`ui/` 一行没改）
+## 11. 10-04 更新：和 Haward 的界面合并后
 
-**`ui/` 目录完全没动，现在的界面照常运行，不会坏。** 下面都是新增的 Python 接口，要不要接、什么时候接，由你决定。接法都给了参考代码（在我本地的服务副本上实测过）。
+`main` 上 Haward 的界面（`ui/service.py`）通过 `engine.SkillEngine` 调用诊断引擎。合并后：
 
-| 接口 | 作用 | 对应界面功能 |
+| 部分 | 现在用的是 | 界面要不要改 |
 |---|---|---|
-| `llm.answer()` / `llm.answer_stream()` | 对话：手册问答 + **现场排查**（`diagnosed`）+ **长期记忆**（`remembered`） | 知识问答 / 诊断对话框 |
-| `engine.runner.run_skill(skill_id)` | 真实执行技能，产出的事件和字段**和 `DEMO_RUNS` 演示流完全一样** | 一键体检 |
-| `engine.loader.list_skills()` | 扫描 `skills/`，返回技能名称、描述、能否执行 | 技能列表 |
-| `engine.skillgen.build(name, run)` | 把一次执行结果存成可以直接执行的新技能目录 | 存为技能 |
-| `llm.cite(sections, query)` | 手册章节号 → 真实页码和原文 | 出处 |
+| 技能内容（`skills/`） | 陈文韬的 4 个交换机技能（网络连通、Flash 存储空间、SSH 登录、日志审计），交换机命令的回放数据取自手册示例 | 不用 |
+| 引擎（`engine/`） | 陈文韬的引擎；`engine/skill_engine.py` 提供和原来一样的 `SkillEngine` 接口（`list_skills` / `run` / `save_skill`、`loader.load`、`EngineError`、`SkillValidationError`） | 不用 |
+| 一键体检 `real` 模式 | 本机命令（Windows：`ping -n`、`ipconfig`；macOS：`ping -c`、`ifconfig`、`netstat -rn`）真实执行；交换机命令（`display …`）读回放，输出第一行写明出自手册哪一页 | 不用 |
+| 一键体检 `simulation` 模式 | 全部命令读回放 | 不用 |
+| 事件和字段 | `start / collect / rules / ai / report / done`，字段和原来一样（`run_id`、`collected`、`rule_path`、`timing`、`display`、`duration_s` 等），另外多了 `mode`（live / replay）、`replay_source`、`finding_id` | 不用 |
+| 出处 | 技能里写章节号，由 `llm.cite()` 查出真实页码；没有依据的结论标「手册中未找到依据」，不隐藏 | 不用 |
+| 知识问答 `/api/ask` | 不变：`answer()` 默认不执行技能、不读写记忆 | 不用 |
 
-### 11.1 对话里排查 + 长期记忆：加第 6 节的 `/api/answer` 就自动有
+### 可选：问答里也能排查 + 长期记忆
 
-- 「MES 服务器连不上了，帮我查一下」→ `answer_type: diagnosed`，`run` 里是完整的执行结果（命令、规则路径、报告），可以直接用现有的 `renderRules(run.rules)`、`renderReport(run)` 显示。
-- 「记一下，MES 服务器是 192.168.10.20」→ `answer_type: remembered`。
-- 「交换机 SSH 一直登不上」→ 照常回答手册内容，`suggestion` 为「要我现场排查吗？回复「好」…」；用户回「好」就执行排查。
-- 长期记忆存在本机 `kb/memory.db` 和 `kb/memory/*.md`，前端不用管存储。
-
-前端要做的：第 4 节新增的两种 `answer_type`；`suggestion` 的提示（或一个「开始排查」按钮，点击等于发送「好」）；`history` 多存 `query`、`suggest_skill`（第 5 节）。
-
-### 11.2 一键体检接真实引擎（替换 `DEMO_RUNS`）
-
-在 `_diagnose_stream()` 开头加上下面这段：技能能执行就走引擎，否则照旧用演示数据。
+`answer()` 加了参数 `diagnose`（默认 `False`）。界面想要「在问答框里说『帮我查一下』就执行技能、记住现场信息」时：
 
 ```python
-# 文件开头
-try:
-    from engine import loader as engine_loader
-    from engine.runner import run_skill as engine_run_skill
-except Exception:            # 没装 pyyaml 等情况：退回演示数据
-    engine_loader = engine_run_skill = None
-
-# _diagnose_stream() 开头
-skill_dir = SKILLS_DIR / skill_id
-if engine_loader and re.fullmatch(r"[A-Za-z0-9_-]+", skill_id) and engine_loader.load_skill(skill_dir)["valid"]:
-    self.send_response(200)
-    self.send_header("Content-Type", "text/event-stream; charset=utf-8")
-    self.send_header("Cache-Control", "no-store")
-    self.end_headers()
-    try:
-        for event, data in engine_run_skill(skill_id):     # start / collect / rules / ai / report / done
-            self._send_sse(event, data)
-    except Exception as exc:
-        self._send_sse("error", {"message": f"诊断引擎出错：{exc}"})
-    return
-# ……下面是原来的 DEMO_RUNS 代码，不用动
+result = answer(question, history=..., locale=locale, diagnose=True)
 ```
 
-- `start.demo` 为 `false`，界面徽标会显示「本机执行中」。
-- 交换机命令的输出第一行是「【模拟回放 · 来源：手册哪一页、改了什么】」；本机命令（ping 等）是真实执行的。
-- `collect` 和 `findings` 比演示数据多了几个字段（`id`、`mode`、`raw`、`finding_id`、`refs`），现有代码会忽略。
+此时会多出两种 `answer_type`：
+- `diagnosed`：已执行技能，`run` 是完整的执行结果，可以直接用一键体检的渲染函数显示；
+- `remembered`：已记住现场信息。
 
-### 11.3 技能列表
-
-`list_skill_cards()` 里，技能卡片的名称和描述可以改读 `SKILL.md`。能执行的技能要设置 `demo_ready: true`，否则 `app.js` 会把「一键体检」按钮置灰（`skills/` 目录里的技能默认不是 `demo`）。
-
-```python
-skill = engine_loader.load_skill(skill_dir)
-if skill["valid"]:
-    card.update({"name": skill["name"], "description": skill["description"],
-                 "command_count": len(skill["collect"]["commands"]), "demo_ready": True})
-```
-
-### 11.4 存为技能
-
-`/api/save-skill` 收到的 `run` 是一键体检 `done` 事件的数据。如果是引擎执行的结果（`run["engine"]` 为 `true`），改用：
-
-```python
-from engine import skillgen
-result = skillgen.build(name, run, SKILLS_DIR, slug=slug)   # → {"skill_id", "path", "errors"}
-```
-
-生成的技能目录包含 `SKILL.md`、`collect.yaml`、`rules.yaml`、`refs.yaml` 和 `replay/`，可以直接执行。
-
-### 11.5 已知情况
-
-- 4 个技能的 ID 没变（`net-unreachable` / `disk-full` / `service-down` / `log-audit`），内容改成了交换机方向。`DEFAULT_SKILLS` 和 `app.js` 里的描述文字、英文翻译还是旧的，需要的话改一下文字即可。
-- 存为技能后，同一个浏览器再执行这个新技能时，`app.js` 会优先播放 `localStorage` 里保存的回放，不经过引擎（前端原有逻辑）。
-- 新增依赖 `pyyaml`，记得 `pip install -r requirements.txt`。
-- 技能、规则树、回放数据的说明见 [`engine/README.md`](../engine/README.md)。
+还会多出 `suggestion` 字段（「要我现场排查吗？回复「好」…」）。`history` 需要多存 `query`、`suggest_skill` 两个字段（第 5 节）。长期记忆存在本机 `kb/memory.db` 和 `kb/memory/*.md`，前端不用管。
 
 有问题找陈文韬。

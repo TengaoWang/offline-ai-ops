@@ -1,0 +1,35 @@
+{
+  "answerable": [
+    {"id": "a01", "question": "现场看到一个以太网端口不亮，应该先读取哪些接口状态信息？", "expect_any": ["display interface", "接口"]},
+    {"id": "a02", "question": "网线已插好但设备端显示物理状态为 DOWN，请给出排查顺序。", "expect_any": ["DOWN", "接口"]},
+    {"id": "a03", "question": "业务高峰时交换机命令行响应很慢，怎样核查是否为 CPU 异常？", "expect_any": ["CPU", "占用率"]},
+    {"id": "a04", "question": "同一网络中的目标地址完全 ping 不到，应从哪些方向逐步定位？", "expect_any": ["ping", "检查"]},
+    {"id": "a05", "question": "广播流量突然升高并且端口灯持续快闪，怎样确认是否出现二层环路？", "expect_any": ["环路", "MAC"]},
+    {"id": "a06", "question": "终端只拿到 169.254 开头的地址，交换机侧应怎样检查 DHCP 链路？", "expect_any": ["DHCP", "IP"]},
+    {"id": "a07", "question": "能 ping 到管理地址但无法通过 STelnet 登录，排障时应核对什么？", "expect_any": ["SSH", "STelnet", "登录"]},
+    {"id": "a08", "question": "S5700 忘记命令行登录密码，但还能通过 Console 连接，手册给出的恢复方向是什么？", "expect_any": ["密码", "口令", "Console"]},
+    {"id": "a09", "question": "设备要交付给新现场，怎样把现有配置清除并回到缺省状态？", "expect_any": ["恢复", "配置", "出厂"]},
+    {"id": "a10", "question": "怀疑上联光口收光异常，如何读取光模块信息并判断问题？", "expect_any": ["光模块", "transceiver", "收光"]}
+  ],
+  "unanswerable": [
+    {"id": "u01", "category": "明显越界", "question": "Excel 数据透视表怎样按月份分组？"},
+    {"id": "u02", "category": "明显越界", "question": "PostgreSQL 流复制的部署步骤是什么？"},
+    {"id": "u03", "category": "明显越界", "question": "Apache 返回 503 时怎样修复后端应用？"},
+    {"id": "u04", "category": "明显越界", "question": "请用 Java 写一个文件上传接口。"},
+    {"id": "u05", "category": "手册未覆盖", "question": "这批 S 系列设备的正式停售日期是哪一天？"},
+    {"id": "u06", "category": "手册未覆盖", "question": "请给出本地经销商今天的含税报价。"},
+    {"id": "u07", "category": "手册未覆盖", "question": "下一版交换机固件计划在哪个月发布？"},
+    {"id": "u08", "category": "手册未覆盖", "question": "厂商二线技术支持的值班邮箱是什么？"},
+    {"id": "u09", "category": "条件不足", "question": "没有任何日志和现场信息，请断定交换机故障的唯一根因。"},
+    {"id": "u10", "category": "条件不足", "question": "只知道业务中断，请直接指出具体哪个物理端口配错了。"},
+    {"id": "u11", "category": "相近概念", "question": "Juniper EX 系列怎样配置 Virtual Chassis？"},
+    {"id": "u12", "category": "相近概念", "question": "Cisco StackWise 的完整上线命令有哪些？"}
+  ],
+  "multi_turn": [
+    {"id": "m01", "turns": ["有个端口异常", "补充一下，是物理状态 DOWN，接下来查什么？"], "expect_any": ["接口", "DOWN"]},
+    {"id": "m02", "turns": ["设备准备换到别的现场", "需要清空原有配置，手册怎样操作？"], "expect_any": ["恢复", "配置"]},
+    {"id": "m03", "turns": ["管理面登录失败", "管理 IP 能 ping 通，但 STelnet 会话建不起来。"], "expect_any": ["SSH", "STelnet", "登录"]},
+    {"id": "m04", "turns": ["用户说视频经常卡顿", "连续测试发现间歇性丢包，该核查哪些项？"], "expect_any": ["丢包", "检查"]},
+    {"id": "m05", "turns": ["接入的摄像机没有亮", "它由交换机 PoE 端口供电，请继续排查。"], "expect_any": ["PoE", "供电"]}
+  ]
+}

@@ -66,7 +66,7 @@ class DispatchGuardTest(unittest.TestCase):
 
     def dispatch(self, question, reply, history=None, recalled=None):
         with mock.patch.object(config, "MOCK", False), mock.patch.object(qa, "chat", return_value=json.dumps(reply)):
-            return qa.dispatch(question, history, self.skills, recalled or {"facts": [], "episodes": []})
+            return qa.dispatch(question, history, skills=self.skills, recalled=recalled or {"facts": [], "episodes": []})
 
     def test_explicit_request_runs_skill(self):
         reply = {"action": "diagnose", "clarify_question": "", "query": "q", "skill": "net-unreachable",
@@ -103,6 +103,17 @@ class DispatchGuardTest(unittest.TestCase):
             result = qa.dispatch("怎么配置 trunk")
         self.assertEqual(result["action"], "answer")
         self.assertEqual(chat.call_args.kwargs["schema"], qa.DISPATCH_SCHEMA)  # 原来的提示词和输出格式
+
+
+    def test_answer_default_does_not_touch_skills_or_memory(self):
+        """界面（ui/service.py）调用 answer() 不传 diagnose：不查技能、不读写记忆，返回字段和原来一样。"""
+        reply = {"action": "greet", "clarify_question": "", "query": "你好"}
+        with mock.patch.object(config, "MOCK", False), mock.patch.object(qa, "chat", return_value=json.dumps(reply)), \
+                mock.patch.object(diagnose, "available_skills", side_effect=AssertionError("不应查技能")), \
+                mock.patch.object(diagnose, "recall", side_effect=AssertionError("不应读记忆")):
+            events = list(qa.answer_stream("你好"))
+        self.assertEqual([e["event"] for e in events], ["dispatch", "final"])
+        self.assertNotIn("suggestion", events[-1])
 
 
 if __name__ == "__main__":

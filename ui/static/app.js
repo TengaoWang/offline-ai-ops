@@ -17,6 +17,7 @@ const state = {
   welcomeHtml: "",
   progressStep: 0,
   progressLabel: "等待开始",
+  pendingUploads: [],
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -32,7 +33,7 @@ const EN_TRANSLATIONS = {
   "正在检查本机状态": "Checking local status", "仅连接 127.0.0.1": "Local connection only", "离线优先 · 不向外部发送数据": "Offline first · no data sent externally", "工作区": "Workspace", "本地运行": "Running locally", "刷新系统状态": "Refresh system status", "打开对话列表": "Open chat list", "对话列表": "Chat list", "本地 Agent 工作台": "Local Agent workspace", "新的排障会话": "New troubleshooting chat", "私有会话": "Private chat",
   "离线运维 Agent": "Offline Ops Agent", "本机知识库与技能库": "Local knowledge base and skills", "你好，我可以根据现场描述选择排查技能，逐条执行只读检查，并把判定路径和手册出处一起整理出来。": "Describe an issue and I can select a skill, run read-only checks, and show the decision path with manual references.", "所有诊断都在本机完成。写操作只会作为建议展示，不会自动执行。": "Diagnostics run locally. Write operations are shown as suggestions and are never executed automatically.", "试试这些现场问题": "Choose an example, edit it if needed, then start troubleshooting", "点击示例填入描述，可修改后开始排查": "Choose an example, edit it if needed, then start troubleshooting", "MES 业务网不通，管理口正常": "MES business network unreachable; management interface responds", "服务器磁盘空间告警": "Server disk space alert", "nginx 服务返回 502": "nginx returns HTTP 502",
   "排查技能": "Troubleshooting skill", "排查技能（可选）": "Skill (optional)", "自动匹配（不指定技能）": "Auto-match (no skill selected)", "自动匹配": "Auto-match", "不选技能时将自动匹配": "Leave the skill blank to auto-match", "描述现场故障，例如：MES 服务器业务网不通，管理口还能 ping 通": "Describe the issue, or leave the skill blank for automatic matching", "描述现场故障；不选技能时将自动匹配": "Describe the issue; leave the skill blank for automatic matching", "Enter 发送 · Shift + Enter 换行": "Enter to send · Shift + Enter for a new line", "一键体检": "Run selected skill", "开始排查": "Troubleshoot", "只读白名单命令自动采集 · 修复指令需由现场人员确认": "Read-only allowlisted checks · a person must approve repair commands", "一键体检运行已选技能；开始排查按描述匹配，也可手动指定技能。": "Run selected skill executes it directly; Troubleshoot routes the issue unless you choose a skill.",
-  "排查流程": "Workflow", "等待开始": "Ready", "选择技能": "Choose a skill", "匹配排查场景": "Match the issue", "只读采集": "Read-only collection", "命令与原始输出": "Commands and raw output", "分析判定": "Analyze", "规则树与 AI 补充": "Rules and AI reasoning", "整理报告": "Prepare report", "依据、建议与未决项": "Evidence, actions, and open items", "技能库": "Skill library", "刷新": "Refresh", "技能是可选的。输入关键词查找，或保持自动匹配。": "Skills are optional. Search by keyword or keep automatic matching.", "选择技能后，也可直接描述问题自动路由。": "Choose a skill or describe an issue for automatic routing.", "搜索技能名称或描述": "Search skill name or description", "搜索技能名称或描述…": "Search skills…", "发送故障描述即可由后端本地路由选择技能。": "Send an issue description and the local backend will route it.", "本次出处": "References for this run", "诊断完成后显示系统返回的手册出处。": "Manual references returned by the service appear here.", "安全边界": "Safety boundary", "写操作仅建议，不自动执行": "Write operations are suggestions only",
+  "排查流程": "Workflow", "等待开始": "Ready", "选择技能": "Choose a skill", "匹配排查场景": "Match the issue", "只读采集": "Read-only collection", "命令与原始输出": "Commands and raw output", "分析判定": "Analyze", "规则树与 AI 补充": "Rules and AI reasoning", "整理报告": "Prepare report", "依据、建议与未决项": "Evidence, actions, and open items", "技能库": "Skill library", "刷新": "Refresh", "技能是可选的。输入关键词查找，或保持自动匹配。": "Skills are optional. Search by keyword or keep automatic matching.", "选择技能后，也可直接描述问题自动路由。": "Choose a skill or describe an issue for automatic routing.", "搜索技能名称或描述": "Search skill name or description", "搜索技能名称或描述…": "Search skills…", "发送故障描述即可由后端本地路由选择技能。": "Send an issue description and the local backend will route it.", "会话出处": "Conversation references", "问答后显示经核验的手册出处。": "Verified manual references appear here after each answer.", "安全边界": "Safety boundary", "写操作仅建议，不自动执行": "Write operations are suggestions only",
   "手册检索": "Manual search", "从已建索引的本地手册检索答案，并展示真实出处。": "Search indexed local manuals and show source references.", "你想查询什么？": "What would you like to know?", "例如：S5700 上怎么把 GE0/0/1 配成 trunk 口？": "For example: How do I configure GE0/0/1 as a trunk on an S5700?", "无检索依据时会明确告知，不会生成出处。": "If no evidence is found, the assistant will say so without inventing a citation.", "查询本地手册": "Search local manuals", "等待查询": "Waiting for a query", "答案会附带手册文件名、章节、页码和原文片段。": "Answers include the manual, section, page, and source excerpt.", "本地知识库": "Local knowledge base", "导入设备手册并重建本地索引，文件不会离开这台设备。": "Import device manuals and build a local index. Files stay on this device.", "拖入设备手册，或从本机选择": "Drop a device manual here or choose a local file", "支持 PDF、Markdown、TXT。文件保存到本地 kb/docs/ 目录。": "PDF, Markdown, and TXT are supported. Files are saved under local kb/docs/.", "选择文件": "Choose file", "重建索引": "Rebuild index", "解析文件并展示片段样例，便于核对页码与章节。": "Parse files and show excerpts to help verify page and section metadata.", "重建本地索引": "Rebuild local index", "解析样例": "Parsed samples", "抽样展示文件、章节、页码和原文片段": "Sample file, section, page, and source excerpt", "0 条": "0 items",
   "答辩数据": "Evaluation data", "记录同一场景下的手动排障与 AI 排障数据。": "Compare manual troubleshooting with AI for the same scenario.", "手动排障记录": "Manual troubleshooting", "根据需求文档的现场演示基线，可按实际情况调整。": "Starts with the requirement baseline; edit these values to match field measurements.", "现场记录": "Field notes", "耗时（分钟）": "Time (minutes)", "步骤数": "Steps", "翻手册次数": "Manual lookups", "备注": "Notes", "AI 排障记录": "AI troubleshooting", "从最近一次诊断结果自动读取。": "Read from the latest diagnostic run.", "自动填充": "Auto-filled", "耗时": "Time", "采集命令": "Collected commands", "报告条目": "Findings", "手册出处": "Manual references", "对比表": "Comparison table", "报告数据来自当前浏览器中的本地诊断会话。": "Report data comes from local chats in this browser.", "复制 Markdown": "Copy Markdown", "生成对比表": "Generate comparison", "导出为 Markdown 文件 ↓": "Export Markdown file ↓",
   "检查本地模型服务、模型文件、手册索引和技能库。": "Check the local model service, model files, manual index, and skills.", "交换机测试模拟器": "Switch test simulator", "本机 Mock 命令台，仅返回固定样例，不连接真实设备，也不会执行系统命令。": "Local mock console with fixed outputs. It does not connect to a device or run system commands.", "P00 · 本地模拟": "P00 · Local simulation", "输入模拟命令": "Enter a simulated command", "运行模拟": "Run simulation", "注入拦截示例": "Injection block example", "等待输入": "Waiting for input", "运行模拟命令后，结果会显示在此区域。": "Results appear here after a simulated command runs.", "便携启动状态 · FR-10": "Portable startup · FR-10", "当前原型由本地服务托管。U 盘免安装启动脚本及 Ollama / llama.cpp 双方案打包属于发布交付项，尚未由前端页面实现。": "This prototype is served locally. A zero-install USB launcher with Ollama and llama.cpp packages is a release deliverable and is not implemented in this UI.", "后端接口": "Backend API", "页面通过本机 REST 与 SSE 接口读取健康状态、技能、手册索引和诊断流；接入实现可在本地服务层替换。": "The UI uses local REST and SSE endpoints for health, skills, manuals, and diagnostic streams. The local service layer can be replaced during integration.", "离线运行说明": "Offline operation", "前端静态资源由本地 Python 服务托管。模型、知识库、诊断结果和 Evidence 数据均留在本机，不加载 CDN 或外部资源。": "Static UI assets are served locally. Models, manuals, diagnostic results, and Evidence stay on this device; no CDN or external resources are loaded.", "服务地址：127.0.0.1": "Service address: 127.0.0.1",
@@ -41,6 +42,139 @@ const EN_TRANSLATIONS = {
 };
 
 Object.assign(EN_TRANSLATIONS, {
+  "主导航": "Main navigation",
+  "对话内容": "Conversation",
+  "你好，我可以查询本机设备手册，也可以运行经过校验的只读排障技能。": "I can search local device manuals and run validated read-only troubleshooting skills.",
+  "所有处理都在本机完成。修复指令只展示，绝不会自动执行。": "All processing stays on this device. Repair commands are shown only and are never run automatically.",
+  "点击示例填入问题，可修改后查询": "Choose an example, edit it if needed, then submit",
+  "请选择“手册问答”或“故障诊断”。诊断模式会执行所选模式对应的白名单只读采集。": "Choose Manual Q&A or Diagnostics. Diagnostic mode runs only allowlisted read-only collection for the selected execution mode.",
+  "处理方式": "Mode",
+  "手册问答": "Manual Q&A",
+  "故障诊断": "Diagnostics",
+  "诊断执行": "Execution",
+  "本机只读执行": "Local read-only run",
+  "模拟器固定输出": "Fixed simulator output",
+  "正在加载技能库…": "Loading skills…",
+  "询问本地手册": "Ask the local manuals",
+  "询问设备配置、状态检查或排障步骤；可继续追问上文": "Ask about device configuration, status checks, or troubleshooting; follow-up questions are supported",
+  "手册问答使用本地 RAG；故障诊断只执行技能包内通过白名单的只读命令。": "Manual Q&A uses local RAG. Diagnostics runs only allowlisted read-only commands from a skill package.",
+  "直接运行当前选中的真实技能，不需要输入故障描述": "Run the selected skill directly without entering an issue description",
+  "查询本地手册并核验出处": "Search local manuals and verify citations",
+  "查询手册": "Search manuals",
+  "答案逐条核验手册出处 · 无足够依据时明确拒答": "Every answer is checked against manual citations · insufficient evidence produces an explicit refusal",
+  "排查上下文": "Troubleshooting context",
+  "问答流程": "Q&A workflow",
+  "理解问题": "Understand the question",
+  "补全必要的追问对象": "Identify any required context",
+  "检索手册": "Search manuals",
+  "本机关键词与向量检索": "Local keyword and vector search",
+  "核验结论": "Verify conclusions",
+  "逐条绑定原文证据": "Bind every claim to source text",
+  "展示回答": "Present the answer",
+  "答案、章节与页码": "Answer, section, and page",
+  "合法技能可进行本机只读执行或明确标识的模拟运行；无效技能不可执行。": "Valid skills can run locally in read-only mode or as clearly labeled simulations. Invalid skills cannot run.",
+  "诊断模式下可由后端匹配技能，也可手动选择。": "In diagnostic mode, let the backend match a skill or choose one manually.",
+  "支持 PDF、Markdown、TXT。文件先进入暂存区，索引验证成功后与手册清单一起发布。": "PDF, Markdown, and TXT are supported. Files are staged first and published with the manual list only after index validation succeeds.",
+  "构建并发布知识库": "Build and publish the knowledge base",
+  "构建期间暂停问答；失败时保留当前可用版本。": "Q&A pauses during the build; the current working version is retained if the build fails.",
+  "构建并发布": "Build and publish",
+  "请填写真实现场记录": "Enter actual field notes",
+  "运行环境": "Runtime environment",
+  "模拟命令示例": "Simulated command examples",
+  "发布脚本会核对本地运行时、模型、索引和校验清单；实际 Windows/macOS 无网验收状态以发布报告为准。": "The release scripts verify the local runtime, models, index, and checksums. See the release report for actual offline Windows and macOS acceptance status.",
+  "前端只通过本机 API 读取模型、知识库和真实诊断结果。": "The frontend reads models, the knowledge base, and real diagnostic results only through local APIs.",
+  "现场沉淀技能": "Field-derived skill",
+  "磁盘空间现场复用检查": "Reusable field disk-space check",
+  "问答未就绪：请检查 Ollama、问答模型和有效索引。": "Q&A is not ready. Check Ollama, the Q&A model, and the active index.",
+  "正在处理": "Processing",
+  "准备诊断": "Preparing diagnostics",
+  "准备体检": "Preparing checkup",
+  "已匹配": "Matched",
+  "当前运行经过真实技能引擎与规则树，但采集输出来自明确标识的 simulation 固件。": "This run uses the real skill engine and rule tree, but collection output comes from a clearly labeled simulation fixture.",
+  "模拟诊断完成": "Simulation complete",
+  "真实诊断完成": "Live diagnostic complete",
+  "文件系统最高使用率达到 90%": "Maximum filesystem usage reached 90%",
+  "临时目录占用已采集": "Temporary-directory usage collected",
+  "主机信息已采集": "Host information collected",
+  "文件系统容量达到告警阈值": "Filesystem usage reached the alert threshold",
+  "当前只确认容量告警，具体占用来源仍需人工核对": "Only the capacity alert is confirmed; the source of usage still requires manual verification",
+  "由现场人员确认可清理文件或扩容方案": "Have an on-site operator confirm which files can be cleaned up or whether to expand capacity",
+  "清理前备份并核对业务影响": "Back up data and verify service impact before cleanup",
+  "已读取临时目录占用": "Temporary-directory usage read successfully",
+  "/tmp 目录大小采集成功": "/tmp directory size collected successfully",
+  "该结果仅作为容量定位上下文": "This result is context for capacity analysis only",
+  "核对临时文件归属后再决定是否处理": "Verify ownership of temporary files before taking action",
+  "已记录诊断主机上下文": "Diagnostic host context recorded",
+  "主机系统信息采集成功": "Host system information collected successfully",
+  "用于标识本次容量检查环境，不单独构成故障根因": "Identifies the environment for this capacity check and is not a root cause on its own",
+  "将主机信息与容量记录一并交接": "Include host information with the capacity record during handoff",
+  "磁盘容量只读检查": "Read-only disk-capacity check",
+  "内置离线运维诊断基线": "Built-in offline operations diagnostic baseline",
+  "系统没有返回原文片段。": "The service did not return a source excerpt.",
+  "将从服务端已完成运行 ": "The completed server run ",
+  " 复制并重新校验以下内容：": " will be copied and the following content revalidated:",
+  "已执行且通过白名单的 collect.yaml": "Executed allowlisted collect.yaml",
+  "原技能的受限 rules.yaml": "Restricted rules.yaml from the source skill",
+  "可解析的 refs.yaml": "Validated refs.yaml",
+  "不会接受浏览器提交的任意命令或出处。": "Arbitrary commands or citations submitted by the browser are not accepted.",
+  "已暂存：": "Staged: ",
+  "。尚未影响当前知识库，请点击构建并发布。": ". The active knowledge base is unchanged; select Build and publish.",
+  "正在创建手册快照并建立索引；期间暂停问答…": "Creating a manual snapshot and building the index; Q&A is paused…",
+  "存在同名已发布手册。确认用暂存文件替换并重新构建吗？": "A published manual with the same name exists. Replace it with the staged file and rebuild?",
+  "正在建立索引…": "Building the index…",
+  "索引构建失败": "Index build failed",
+  "已发布知识库版本：": "Published knowledge-base revision: ",
+  "。可检查文件格式，或继续使用预置手册演示。": ". Check the file format or continue with the bundled manual demo.",
+  "本次耗时 · ": "Elapsed · ",
+  "该命令不在白名单，已拒绝": "Command rejected because it is not allowlisted",
+  "模拟器未执行任何命令。": "The simulator did not run any command.",
+  "模拟成功 · 固定样例输出": "Simulation succeeded · fixed sample output",
+  "如何查看交换机接口当前状态？": "How do I check the current switch interface status?",
+  "离线手册助手": "Offline Manual Assistant",
+  "已通过出处与命令核对": "Citations and commands verified",
+  "手册整理回答": "Manual-based answer",
+  "手册原文摘录": "Manual excerpt",
+  "需要补充信息": "More information required",
+  "离线助手": "Offline assistant",
+  "超出手册范围": "Outside manual scope",
+  "手册依据不足": "Insufficient manual evidence",
+  "模型整理未通过 · 展示原文": "Model summary not verified · showing source text",
+  "等待补充信息": "Waiting for more information",
+  "本机回答": "Local answer",
+  "范围分流": "Scope routing",
+  "未找到依据": "No evidence found",
+  "未发布无依据结论": "Unsupported conclusion not published",
+  "读取文件系统容量和临时目录占用，用规则树判断容量告警；全程不删除文件。": "Read filesystem capacity and temporary-directory usage, then evaluate capacity alerts with a rule tree. No files are deleted.",
+  "读取最近登录、当前会话和系统运行摘要，适用于基础日志审计与交接。": "Read recent logins, current sessions, and a system summary for basic log auditing and handoff.",
+  "检查目标连通性、本机回环、路由表和主机信息，适用于网络不可达的初步只读定位。": "Check target connectivity, loopback, routes, and host information for an initial read-only network diagnosis.",
+  "只读采集进程、端口、系统负载和 nginx 服务状态，适用于服务不可用的初步定位。": "Collect processes, ports, system load, and nginx status in read-only mode for an initial service-availability diagnosis.",
+  "适用于本次诊断中沉淀出的现场排查流程。": "A field troubleshooting workflow captured from this diagnostic run.",
+  "服务就绪后可在本机运行诊断与手册问答。": "When ready, the service can run diagnostics and manual Q&A locally.",
+  "模型后端": "Model backend",
+  "模型": "Model",
+  "索引": "Index",
+  "检索方式": "Retrieval mode",
+  "关键词 + 向量混合检索": "Hybrid keyword and vector retrieval",
+  "仅关键词检索；请补齐 embedding 与向量": "Keyword-only retrieval; add embeddings and vectors to enable hybrid retrieval",
+  "问答能力": "Q&A capability",
+  "真实本地问答已就绪": "Live local Q&A is ready",
+  "当前操作": "Current operation",
+  "处理中": "Processing",
+  "模型状态未知，需要重启服务": "Model state is unknown; restart the service",
+  "空闲": "Idle",
+  "本机 REST + SSE /api/*": "Local REST + SSE /api/*",
+  "U 盘便携启动": "Portable USB startup",
+  "演示模式未验证实际连接状态": "Demo mode does not verify a live connection",
+  "演示模式未加载真实模型": "Demo mode does not load a live model",
+  "未就绪；请导入手册并重建索引": "Not ready; import manuals and rebuild the index",
+  "未就绪": "Not ready",
+  "当前没有已导入的设备手册。索引未就绪时，问答和诊断不会显示虚构出处。": "No device manuals are imported. Q&A and diagnostics will not show fabricated citations while the index is unavailable.",
+  "Evidence Markdown 对比表": "Evidence comparison in Markdown",
+  "UI 路径面板": "UI path panel",
+  "报告出处栏": "Report citations",
+  "经验保留在个人记录中": "Experience remains in personal notes",
+  "答辩陈述": "Presentation statement",
+  "报告未决栏": "Report unresolved-items section",
   "三个现场问题是预设场景；当前诊断 SSE 返回固定演示数据，采集、判定和报告不是模型即时生成。": "The three incident prompts are predefined. The current diagnostic SSE returns fixed demo data; collection, decisions, and reports are not generated live by a model.",
   "前端通过独立本机 API 与后端交互；当前服务可直接联调，后续替换本地服务层时保留这些请求契约。": "The UI talks to the backend through local APIs. The current service is ready for integration, and these request contracts can be retained when the local service layer is replaced.",
   "直接运行当前选中的技能，不需要输入故障描述": "Run the selected skill directly without entering an issue description",
@@ -180,20 +314,54 @@ const ZH_TRANSLATION_ENTRIES = Array.from(ZH_TRANSLATIONS.entries()).sort((a, b)
 const originalTextNodes = new WeakMap();
 const originalAttributes = new WeakMap();
 
+const EN_DYNAMIC_TRANSLATIONS = [
+  [/^(\d+) 条$/, (_, count) => `${count} items`],
+  [/^(\d+) 个$/, (_, count) => `${count}`],
+  [/^(\d+) 条命令已回显$/, (_, count) => `${count} commands returned`],
+  [/^(\d+) 条分级结论$/, (_, count) => `${count} severity-ranked findings`],
+  [/^(\d+) 条只读检查 · (.+)$/, (_, count, readiness) => `${count} read-only checks · ${translateUiText(readiness)}`],
+  [/^显示前 (\d+) 项，输入关键词筛选其余技能（共 (\d+) 个）$/, (_, shown, total) => `Showing ${shown}; search to filter all ${total} skills`],
+  [/^自动匹配（最近：(.+)）$/, (_, name) => `Auto-match (recent: ${translateUiText(name)})`],
+  [/^(.+) · 已选择$/, (_, name) => `${translateUiText(name)} · selected`],
+  [/^本机技能库 · (.+)$/, (_, name) => `Local skills · ${translateUiText(name)}`],
+  [/^(命中规则|未命中规则) (.+) · (.+)$/, (_, stateText, rule, label) => `${stateText === "命中规则" ? "Matched rule" : "Unmatched rule"} ${rule} · ${translateUiText(label)}`],
+  [/^走向分支：(.+)$/, (_, branch) => `Branch: ${branch}`],
+  [/^重命名对话：(.+)$/, (_, title) => `Rename chat: ${translateUiText(title)}`],
+  [/^删除对话：(.+)$/, (_, title) => `Delete chat: ${translateUiText(title)}`],
+  [/^已导入 (\d+) 份手册 · 索引 已就绪，共 (\d+) 个片段$/, (_, files, chunks) => `${files} manual(s) imported · index ready with ${chunks} chunks`],
+  [/^已导入 (\d+) 份手册 · 索引 尚未建立$/, (_, files) => `${files} manual(s) imported · index not built`],
+  [/^已找到 (.+)$/, (_, model) => `Found ${model}`],
+  [/^未找到 (.+)$/, (_, model) => `Not found: ${model}`],
+  [/^已连接 (.+)$/, (_, backend) => `Connected to ${backend}`],
+  [/^未连接；请启动 (.+)$/, (_, backend) => `Not connected; start ${backend}`],
+  [/^已就绪，包含 (\d+) 个片段(.*)$/, (_, chunks, revision) => `Ready with ${chunks} chunks${revision}`],
+  [/^(.+) 使用率为 (\d+)%$/, (_, mount, usage) => `${mount} usage is ${usage}%`],
+  [/^最高使用率为 (\d+)%$/, (_, usage) => `Maximum usage is ${usage}%`],
+  [/^读取到 (\d+) 条非空记录$/, (_, count) => `Read ${count} non-empty records`],
+  [/^读取到 (\d+) 个当前会话$/, (_, count) => `Read ${count} current sessions`],
+  [/^本次耗时 · (.+)$/, (_, mode) => `Elapsed · ${mode}`],
+  [/^(Ollama|模型|索引)：(.+)$/, (_, label, status) => `${translateUiText(label)}: ${translateUiText(status)}`],
+  [/^由运行 (`[^`]+`) 从 (`[^`]+`) 的已验证流程沉淀。$/, (_, run, source) => `Captured from the validated ${source} workflow in run ${run}.`],
+  [/^(.+) · ([0-9.]+) 秒$/, (_, mode, seconds) => `${translateUiText(mode)} · ${seconds} s`],
+  [/^(.+) · ([0-9.]+)s$/, (_, mode, seconds) => `${translateUiText(mode)} · ${seconds}s`],
+];
+
 function translateUiText(value) {
   if (state.locale !== "en") return value;
   if (Object.hasOwn(EN_TRANSLATIONS, value)) return EN_TRANSLATIONS[value];
-  let translated = value;
-  EN_TRANSLATION_ENTRIES.forEach(([source, target]) => {
-    translated = translated.replaceAll(source, target);
-  });
-  return translated;
+  const match = String(value).match(/^(\s*)(.*?)(\s*)$/s);
+  const [, leading, core, trailing] = match || ["", "", String(value), ""];
+  if (Object.hasOwn(EN_TRANSLATIONS, core)) return leading + EN_TRANSLATIONS[core] + trailing;
+  for (const [pattern, replacement] of EN_DYNAMIC_TRANSLATIONS) {
+    if (pattern.test(core)) return leading + core.replace(pattern, replacement) + trailing;
+  }
+  return value;
 }
 
 function isUserContent(node) {
   const commandOutput = node.parentElement?.closest(".command-output");
   if (commandOutput && commandOutput.closest(".agent-run")?.dataset.demo !== "true") return true;
-  return Boolean(node.parentElement?.closest(".user-bubble, .command-main code, .source-button, .source-shelf-item, .source-text, .sample-item p, input, textarea"));
+  return Boolean(node.parentElement?.closest(".user-bubble, .manual-answer-text, .command-main code, .source-button, .source-shelf-item, .source-text, .sample-item p, input, textarea"));
 }
 
 function localizePage() {
@@ -236,6 +404,12 @@ function localizePage() {
     });
   });
   document.documentElement.lang = state.locale;
+  document.title = state.locale === "en" ? "Offline AI Ops Assistant" : "离线 AI 运维助手";
+  document.querySelectorAll("[data-i18n-value-zh][data-i18n-value-en]").forEach((element) => {
+    const zh = element.dataset.i18nValueZh;
+    const en = element.dataset.i18nValueEn;
+    if (element.value === zh || element.value === en) element.value = state.locale === "en" ? en : zh;
+  });
   const toggle = $("#languageToggle");
   if (toggle) {
     const toggleText = state.locale === "zh-CN" ? "EN" : "中文";
@@ -291,7 +465,12 @@ async function api(path, options = {}) {
     headers: isForm ? options.headers : { "Content-Type": "application/json", ...(options.headers || {}) },
   });
   const payload = await response.json();
-  if (!response.ok) throw new Error(payload.error || ("请求失败：" + response.status));
+  if (!response.ok) {
+    const error = new Error(payload.error || ("请求失败：" + response.status));
+    error.code = payload.code;
+    error.status = response.status;
+    throw error;
+  }
   return payload;
 }
 
@@ -316,7 +495,7 @@ function renderHealth(health) {
     statusChip("模型", modelReady),
     statusChip("索引", health.index),
   ].join("");
-  const allReady = (health.ollama || health.mock) && modelReady;
+  const allReady = Boolean(health.rag_ready || health.mock);
   $("#navStatusDot").classList.toggle("ready", Boolean(allReady));
   $("#sidebarHealth").innerHTML = '<span class="health-dot ' + (allReady ? "ready" : "") + '"></span><span><strong>' + (health.mock ? "本地演示模式已就绪" : allReady ? "本地模型服务已连接" : "模型服务尚未就绪") + '</strong><small>' + (health.mock ? "使用本地演示数据" : "仅连接本机服务") + "</small></span>";
   renderStatus(health);
@@ -327,9 +506,12 @@ function renderStatus(health) {
   const manualFiles = (health.manual_files || []).map((file) => file.name + "（" + Math.ceil(file.size / 1024) + " KB）").join("、") || "未导入手册";
   const rows = [
     ["运行模式", health.mock ? "本地 Mock 演示" : "连接本地模型"],
-    ["Ollama", health.mock ? "演示模式未验证实际连接状态" : health.ollama ? "已连接" : "未连接；请启动 Ollama"],
+    ["模型后端", health.mock ? "演示模式未验证实际连接状态" : health.backend_ready ? "已连接 " + (health.backend || "ollama") : "未连接；请启动 " + (health.backend || "ollama")],
     ["模型", health.mock ? "演示模式未加载真实模型" : health.model ? "已找到 " + health.model_name : "未找到 " + health.model_name],
-    ["知识索引", health.index ? "已就绪，包含 " + health.chunks + " 个片段" : "未就绪；请导入手册并重建索引"],
+    ["知识索引", health.index ? "已就绪，包含 " + health.chunks + " 个片段" + (health.index_revision ? " · " + health.index_revision : "（旧版路径）") : "未就绪；请导入手册并重建索引"],
+    ["检索方式", health.retrieval_mode === "hybrid" ? "关键词 + 向量混合检索" : "仅关键词检索；请补齐 embedding 与向量"],
+    ["问答能力", health.rag_ready ? "真实本地问答已就绪" : "未就绪"],
+    ["当前操作", health.busy ? (health.operation || "处理中") : health.recovering ? "模型状态未知，需要重启服务" : "空闲"],
     ["技能包", (health.skills_count || state.skills.length) + " 个"],
     ["后端接口", "本机 REST + SSE /api/*"],
     ["交换机测试模拟器", "本地固定样例，不连接真实设备"],
@@ -340,7 +522,7 @@ function renderStatus(health) {
     ["模型加载", "加载中时请等待，模型 + 服务目标 ≤ 3 分钟"],
   ];
   $("#statusTable").innerHTML = rows.map((row) => '<div class="status-row"><strong>' + escapeHtml(row[0]) + '</strong><span>' + escapeHtml(row[1]) + "</span></div>").join("");
-  const ready = Boolean((health.ollama || health.mock) && (health.model || health.mock));
+  const ready = Boolean(health.rag_ready || health.mock);
   $("#statusSummaryCard").innerHTML = '<span class="status-summary-icon ' + (ready ? "" : "warn") + '">' + (ready ? "✓" : "!") + '</span><div><strong>' + (health.mock ? "本地 Mock 演示可用" : ready ? "本机服务可用" : "本机服务未完全就绪") + '</strong><span>' + (health.mock ? "当前使用固定演示数据；真实模式会连接 Ollama 与本地模型。" : "服务就绪后可在本机运行诊断与手册问答。") + "</span></div>";
 }
 
@@ -564,6 +746,7 @@ function renderConversationLists() {
 function persistActiveConversation() {
   const conversation = activeConversation();
   if (conversation) {
+    if (!Array.isArray(conversation.messages)) conversation.messages = [];
     conversation.html = sourceLocaleConversationHtml();
     conversation.sources = state.sources;
     conversation.lastRun = state.lastRun;
@@ -594,6 +777,7 @@ function makeConversation() {
     progressLabel: "等待开始",
     skillId: null,
     manualSkill: false,
+    messages: [],
   };
 }
 
@@ -734,7 +918,8 @@ function saveConversationRename(event) {
   conversation.title = title;
   conversation.titleManual = true;
   conversation.titleText = "";
-  conversation.updatedAt = Date.now();
+    conversation.updatedAt = Date.now();
+    if (!Array.isArray(conversation.messages)) conversation.messages = [];
   if (conversation.id === state.activeConversationId) $("#threadTitle").textContent = title;
   state.renameConversationId = null;
   storeConversations();
@@ -831,6 +1016,26 @@ function appendNotice(title, body, kind) {
   return message;
 }
 
+function appendManualAnswer(result) {
+  const citations = result.citations || [];
+  const sourceButtons = citations.map((citation) => {
+    const index = state.sources.push(citation) - 1;
+    return '<button class="source-button" type="button" data-source-index="' + index + '">' + escapeHtml(citation.label || "手册出处") + '</button>';
+  }).join("");
+  const message = document.createElement("article");
+  message.className = "message assistant-message manual-answer-message";
+  const titles = { generated: "手册整理回答", extracted: "手册原文摘录", clarify: "需要补充信息", intro: "离线助手", out_of_scope: "超出手册范围", not_found: "手册依据不足" };
+  const badges = { generated: "已通过出处与命令核对", extracted: "模型整理未通过 · 展示原文", clarify: "等待补充信息", intro: "本机回答", out_of_scope: "范围分流", not_found: "未找到依据" };
+  const title = titles[result.answer_type] || (result.found ? "手册回答" : "手册依据不足");
+  const badge = badges[result.answer_type] || (result.found ? "手册回答" : "未发布无依据结论");
+  const warnings = (result.warnings || []).map((warning) => '<div class="demo-note">' + escapeHtml(warning) + '</div>').join("");
+  message.innerHTML = '<div class="message-avatar assistant-avatar" aria-hidden="true">AI</div><div class="message-body"><div class="message-meta"><strong>离线手册助手</strong><span>' + escapeHtml(badge) + '</span></div>' + warnings + '<div class="answer-box ' + (result.found || result.answer_type === "intro" || result.answer_type === "clarify" ? "" : "no-source") + '"><strong>' + escapeHtml(title) + '</strong><p class="manual-answer-text">' + escapeHtml(result.answer || "手册中未找到依据。") + '</p><div class="answer-meta">' + escapeHtml((result.retrieval_mode || "本地分流") + " · " + Number(result.latency_s || 0).toFixed(1) + " 秒") + '</div>' + (sourceButtons ? '<div class="source-list">' + sourceButtons + '</div>' : "") + "</div></div>";
+  $("#chatFeed").appendChild(message);
+  renderSourceShelf();
+  persistActiveConversation();
+  scrollChatToBottom();
+}
+
 function setProgress(active, stateText) {
   state.progressStep = active;
   state.progressLabel = stateText;
@@ -870,7 +1075,7 @@ function appendCommand(command) {
   if (empty) empty.remove();
   const row = document.createElement("article");
   row.className = "command-card " + escapeHtml(command.status);
-  row.innerHTML = '<div class="command-main"><code>' + escapeHtml(command.cmd) + '</code><pre class="command-output">' + escapeHtml(command.output || "未能获取输出") + '</pre></div><div class="command-meta"><span class="command-state">' + escapeHtml(statusText(command.status)) + '</span><span>' + escapeHtml(command.duration) + "s</span></div>";
+  row.innerHTML = '<div class="command-main"><code>' + escapeHtml(command.display || command.cmd) + '</code><pre class="command-output">' + escapeHtml(command.output || "未能获取输出") + '</pre></div><div class="command-meta"><span class="command-state">' + escapeHtml(statusText(command.status)) + '</span><span>' + escapeHtml(command.duration_s ?? command.duration ?? 0) + "s</span></div>";
   list.appendChild(row);
   const count = $$(".command-card", list).length;
   $("[data-command-count]", state.currentRunEl).textContent = count + " 条命令已回显";
@@ -934,7 +1139,10 @@ function setBusy(busy) {
   $("#dialogNewChatBtn").disabled = busy;
   $("#quickCheckupBtn").disabled = busy || !state.selectedSkill || !state.manualSkill;
   $("#skillPickerBtn").disabled = busy || !state.skills.length;
-  $("#sendBtn").querySelector("span:first-child").textContent = busy ? "正在排查" : "开始排查";
+  $("#interactionMode").disabled = busy;
+  $("#executionMode").disabled = busy;
+  const diagnostic = $("#interactionMode").value === "diagnose";
+  $("#sendBtn").querySelector("span:first-child").textContent = busy ? "正在处理" : diagnostic ? "开始排查" : "查询手册";
   renderSkills();
   renderConversationLists();
 }
@@ -945,8 +1153,15 @@ async function sendMessage(event) {
   const text = $("#faultText").value.trim();
   if (!text) return;
   const conversationId = state.activeConversationId;
+  const diagnostic = $("#interactionMode").value === "diagnose";
   const shouldGenerateTitle = ["新的排障会话", "New troubleshooting chat"].includes(activeConversation()?.title || "");
+  const conversation = activeConversation();
+  const history = Array.isArray(conversation?.messages) ? conversation.messages.filter((item) => item.status === "complete").map(({ role, content, action }) => ({ role, content, action })) : [];
   appendUserMessage(text);
+  if (conversation && !diagnostic) {
+    if (!Array.isArray(conversation.messages)) conversation.messages = [];
+    conversation.messages.push({ role: "user", content: text, status: "complete" });
+  }
   const provisionalTitle = fallbackConversationTitle(text, state.manualSkill ? state.selectedSkill : null);
   if (shouldGenerateTitle) {
     const conversation = activeConversation();
@@ -958,69 +1173,75 @@ async function sendMessage(event) {
     setConversationTitle(conversationId, provisionalTitle);
   }
   $("#faultText").value = "";
-  state.sources = [];
-  renderSourceShelf();
+  if (diagnostic) {
+    setBusy(true);
+    setProgress(1, "准备诊断");
+    if (shouldGenerateTitle) requestConversationTitle(text, state.manualSkill ? state.selectedSkill : null, conversationId);
+    runDiagnostic(state.manualSkill ? state.selectedSkill : null, text, $("#executionMode").value);
+    return;
+  }
   setBusy(true);
-  setProgress(1, "识别技能");
-  let skillId = null;
+  setProgress(1, "检索手册");
+  const requestId = self.crypto?.randomUUID ? self.crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2);
+  const started = Date.now();
+  const waiting = appendNotice("正在查询本地手册", "正在检索、生成并逐条核验依据 · 0 秒", "");
+  const timer = window.setInterval(() => {
+    const paragraph = waiting.querySelector(".answer-box p");
+    if (paragraph) paragraph.textContent = "正在检索、生成并逐条核验依据 · " + Math.floor((Date.now() - started) / 1000) + " 秒";
+  }, 1000);
   try {
-    if (state.manualSkill && state.selectedSkill) {
-      skillId = state.selectedSkill;
-    } else {
-      const routeResult = await api("/api/route", { method: "POST", body: JSON.stringify({ text }) });
-      skillId = routeResult.skill;
-    }
+    const result = await api("/api/ask", { method: "POST", body: JSON.stringify({ question: text, history, conversation_id: conversationId, request_id: requestId, locale: state.locale }) });
+    waiting.remove();
+    appendManualAnswer(result);
+    if (conversation) conversation.messages.push({ role: "assistant", content: result.answer || "手册中未找到依据。", status: "complete", requestId, citations: result.citations || [], found: Boolean(result.found), action: result.action, answerType: result.answer_type });
+    if (shouldGenerateTitle) requestConversationTitle(text, null, conversationId);
+    setProgress(4, "已完成");
   } catch (error) {
-    appendNotice("技能路由暂不可用", error.message + "。请刷新本地服务状态后重试。", "error");
+    waiting.remove();
+    appendNotice("问答失败", error.message + (error.code === "busy" ? "。请等待当前问答或建库结束后明确重试；系统不会自动重复提交。" : ""), "error");
+    if (conversation) conversation.messages.push({ role: "assistant", content: error.message, status: "failed", requestId });
+    setProgress(0, "问答失败");
+  } finally {
+    window.clearInterval(timer);
     setBusy(false);
-    setProgress(0, "等待开始");
-    return;
+    persistActiveConversation();
   }
-  if (!skillId) {
-    appendNotice("暂未匹配到排查技能", "这个描述不属于当前技能库。请检查故障描述，或选择一个技能包后再发送；不确定的情况建议转交现场运维人员。", "error");
-    setBusy(false);
-    setProgress(0, "等待开始");
-    return;
-  }
-  state.selectedSkill = skillId;
-  state.manualSkill = false;
-  renderSkills();
-  $("#activeSkillLabel").textContent = skillName(skillId);
-  persistActiveConversation();
-  if (shouldGenerateTitle) requestConversationTitle(text, skillId, conversationId);
-  setProgress(2, "采集数据");
-  runDiagnostic(skillId);
 }
 
-function runDiagnostic(skillId) {
+async function runDiagnostic(skillId, issue = "", executionMode = "real") {
   const skill = state.skills.find((item) => item.id === skillId);
-  const replay = state.skillReplays[skillId];
-  if (replay) {
-    runSavedSkillReplay(skillId, replay);
-    return;
-  }
-  if (skill && skill.demo_ready === false) {
-    appendNotice("技能已识别，当前模拟器未配置回放", "已发现该技能目录，但没有对应的本地模拟数据。为避免伪造采集结果，本次没有执行命令。", "error");
+  if (skill && skill.valid === false) {
+    appendNotice("技能不可执行", (skill.errors || []).join("；") || "技能包未通过校验。", "error");
     setBusy(false);
     setProgress(0, "等待开始");
     return;
   }
-  const runEl = appendRunShell(skillId);
+  let created;
+  try {
+    created = await api("/api/diagnose/runs", { method: "POST", body: JSON.stringify({ skill_id: skillId, issue, execution_mode: executionMode, target: { kind: "local", display_name: "localhost" } }) });
+  } catch (error) {
+    appendNotice("无法启动诊断", error.message, "error");
+    setBusy(false);
+    setProgress(0, "启动失败");
+    return;
+  }
+  const runEl = appendRunShell(skillId || "自动匹配技能");
+  runEl.dataset.runId = created.run_id;
   state.sources = [];
   renderSourceShelf();
   setProgress(2, "采集数据");
-  const source = new EventSource("/api/diagnose/stream?skill=" + encodeURIComponent(skillId));
+  const source = new EventSource("/api/diagnose/runs/" + encodeURIComponent(created.run_id) + "/events");
   let serverErrorHandled = false;
   source.addEventListener("start", (event) => {
     const payload = JSON.parse(event.data);
-    runEl.dataset.demo = String(Boolean(payload.demo));
+    runEl.dataset.demo = String(payload.execution_mode !== "real");
     const badge = $("[data-run-badge]", runEl);
-    if (payload.demo || (state.health && state.health.mock)) {
+    if (payload.execution_mode === "simulation") {
       badge.classList.add("demo");
-      badge.textContent = "本地演示数据";
-      $(".run-intro", runEl).textContent = "当前诊断接口返回固定演示流；采集、判定和报告尚未连接真实诊断引擎。";
+      badge.textContent = "模拟器固定输出";
+      $(".run-intro", runEl).textContent = "当前运行经过真实技能引擎与规则树，但采集输出来自明确标识的 simulation 固件。";
     } else {
-      badge.textContent = "本机执行中";
+      badge.textContent = "本机白名单只读执行中";
     }
     persistActiveConversation();
   });
@@ -1029,9 +1250,8 @@ function runDiagnostic(skillId) {
     const payload = JSON.parse(event.data);
     serverErrorHandled = true;
     const badge = $("[data-run-badge]", runEl);
-    badge.classList.add("demo");
-    badge.textContent = "该技能没有模拟回放";
-    appendNotice("技能已识别，当前模拟器无法执行", payload.message || "此技能没有本地演示回放；没有执行命令。", "error");
+    badge.textContent = "诊断失败";
+    appendNotice("诊断失败", payload.message || "诊断未完成。", "error");
     source.close();
     setBusy(false);
     setProgress(0, "等待开始");
@@ -1040,7 +1260,8 @@ function runDiagnostic(skillId) {
   source.addEventListener("collect", (event) => appendCommand(JSON.parse(event.data)));
   source.addEventListener("rules", (event) => {
     setProgress(3, "分析判定");
-    renderRules(JSON.parse(event.data).rules || []);
+    const payload = JSON.parse(event.data);
+    renderRules(payload.rule_path || payload.rules || []);
   });
   source.addEventListener("ai", (event) => {
     const payload = JSON.parse(event.data);
@@ -1056,7 +1277,7 @@ function runDiagnostic(skillId) {
   source.addEventListener("done", (event) => {
     state.lastRun = JSON.parse(event.data);
     $("[data-run-complete]", runEl).hidden = false;
-    $("[data-run-badge]", runEl).textContent = "诊断完成 · " + state.lastRun.elapsed + "s";
+    $("[data-run-badge]", runEl).textContent = (state.lastRun.execution_mode === "simulation" ? "模拟诊断完成" : "真实诊断完成") + " · " + state.lastRun.elapsed + "s";
     setProgress(4, "已完成");
     setBusy(false);
     updateEvidenceMetrics();
@@ -1116,9 +1337,7 @@ async function runSavedSkillReplay(skillId, replay) {
 function openSkillDialog() {
   if (!state.lastRun) return;
   $("#saveSkillResult").textContent = "";
-  const commands = (state.lastRun.commands || []).filter((item) => item.status !== "rejected").map((item) => '  - "' + String(item.cmd).replaceAll('"', '\\"') + '"').join("\n");
-  const rules = (state.lastRun.rules || []).map((rule, index) => '  - id: r' + (index + 1) + '\n    if: "' + String(rule.label || "").replaceAll('"', '\\"') + '"\n    then: "' + String(rule.branch || "").replaceAll('"', '\\"') + '"').join("\n");
-  $("#draftPreview").textContent = "SKILL.md\n# " + $("#skillName").value + "\n\ncollect.yaml\ncommands:\n" + commands + "\n\nrules.yaml\nrules:\n" + rules;
+  $("#draftPreview").textContent = "将从服务端已完成运行 " + state.lastRun.run_id + " 复制并重新校验以下内容：\n- 已执行且通过白名单的 collect.yaml\n- 原技能的受限 rules.yaml\n- 可解析的 refs.yaml\n\n不会接受浏览器提交的任意命令或出处。";
   $("#skillDialog").showModal();
 }
 
@@ -1126,14 +1345,10 @@ async function saveSkill() {
   if (!state.lastRun) return;
   $("#saveSkillResult").textContent = "正在写入本机技能库…";
   try {
-    const result = await api("/api/save-skill", { method: "POST", body: JSON.stringify({ name: $("#skillName").value, run: state.lastRun }) });
-    const replay = JSON.parse(JSON.stringify(state.lastRun));
-    replay.skill = result.skill_id;
-    state.skillReplays[result.skill_id] = replay;
-    storeSkillReplays();
+    const result = await api("/api/skills/save", { method: "POST", body: JSON.stringify({ name: $("#skillName").value, run_id: state.lastRun.run_id }) });
     state.skills = (result.skills || state.skills).map((skill) => ({
       ...skill,
-      demo_ready: Boolean(state.skillReplays[skill.id]) || (skill.demo_ready == null ? skill.source === "demo" : Boolean(skill.demo_ready)),
+      demo_ready: Boolean(skill.valid),
     }));
     state.selectedSkill = result.skill_id;
     state.manualSkill = true;
@@ -1154,7 +1369,7 @@ async function askManual(event) {
   $("#askBtn").disabled = true;
   $("#qaResult").innerHTML = '<div class="empty-card"><strong>正在检索本地手册</strong><p>只查询本机已建索引。</p></div>';
   try {
-    const result = await api("/api/ask", { method: "POST", body: JSON.stringify({ question }) });
+    const result = await api("/api/ask", { method: "POST", body: JSON.stringify({ question, locale: state.locale }) });
     const citations = result.citations || [];
     const demoNote = state.health && state.health.mock ? '<div class="demo-note">当前为 Mock 演示模式。下方答案与引用是固定样例，不代表已从真实手册核验；请切换到真实模式后再用于现场判断。</div>' : "";
     const answerTitle = result.found ? (state.health && state.health.mock ? "演示回答 · Mock" : "回答") : "手册中未找到依据";
@@ -1188,7 +1403,8 @@ async function uploadManual(file) {
   $("#manualResult").classList.remove("error");
   try {
     const result = await api("/api/manuals/upload", { method: "POST", body: form });
-    $("#manualResult").textContent = "已保存到本地：" + result.saved.map((item) => item.name).join("、") + "。请重建索引。";
+    state.pendingUploads.push(...result.saved);
+    $("#manualResult").textContent = "已暂存：" + result.saved.map((item) => item.name).join("、") + "。尚未影响当前知识库，请点击构建并发布。";
     await loadHealth();
   } catch (error) {
     $("#manualResult").textContent = error.message;
@@ -1198,13 +1414,29 @@ async function uploadManual(file) {
 
 async function rebuildIndex() {
   $("#rebuildIndexBtn").disabled = true;
-  $("#manualResult").textContent = "正在重建本地索引，请稍候…";
+  $("#manualResult").textContent = "正在创建手册快照并建立索引；期间暂停问答…";
   $("#manualResult").classList.remove("error");
   try {
-    const result = await api("/api/manuals/ingest", { method: "POST", body: JSON.stringify({}) });
-    $("#manualResult").textContent = "索引完成：" + result.stats.files + " 个文件，" + result.stats.chunks + " 个片段。";
-    renderSamples(result.samples || []);
+    const payload = { upload_ids: state.pendingUploads.map((item) => item.upload_id), base_revision: state.health?.index_revision ?? null, replace_names: [] };
+    let result;
+    try {
+      result = await api("/api/manuals/ingest", { method: "POST", body: JSON.stringify(payload) });
+    } catch (error) {
+      if (error.code !== "replacement_required" || !window.confirm("存在同名已发布手册。确认用暂存文件替换并重新构建吗？")) throw error;
+      payload.replace_names = state.pendingUploads.map((item) => item.name);
+      result = await api("/api/manuals/ingest", { method: "POST", body: JSON.stringify(payload) });
+    }
+    let job;
+    do {
+      await new Promise((resolve) => window.setTimeout(resolve, 1000));
+      job = await api("/api/manuals/jobs/" + encodeURIComponent(result.job_id));
+      $("#manualResult").textContent = job.phase || "正在建立索引…";
+    } while (job.state === "running");
+    if (job.state !== "succeeded") throw new Error(job.error || "索引构建失败");
+    state.pendingUploads = [];
+    $("#manualResult").textContent = "已发布知识库版本：" + job.result.revision + "。";
     await loadHealth();
+    await loadSamples();
   } catch (error) {
     $("#manualResult").textContent = error.message + "。可检查文件格式，或继续使用预置手册演示。";
     $("#manualResult").classList.add("error");
@@ -1216,23 +1448,40 @@ async function rebuildIndex() {
 function updateEvidenceMetrics() {
   const run = state.lastRun;
   if (!run) return;
-  const commands = (run.commands || []).length;
+  const commands = (run.collected || run.commands || []).length;
   const findings = (run.findings || []).length;
   const sources = (run.findings || []).reduce((sum, finding) => sum + ((finding.sources || []).length), 0);
-  $("#aiMetrics").innerHTML = '<div><strong>' + escapeHtml(run.elapsed) + 's</strong><span>本次耗时</span></div><div><strong>' + commands + '</strong><span>采集命令</span></div><div><strong>' + findings + '</strong><span>报告条目</span></div><div><strong>' + sources + '</strong><span>手册出处</span></div>';
+  $("#aiMetrics").innerHTML = '<div><strong>' + escapeHtml(run.elapsed) + 's</strong><span>本次耗时 · ' + escapeHtml(run.execution_mode || "unknown") + '</span></div><div><strong>' + commands + '</strong><span>采集命令</span></div><div><strong>' + findings + '</strong><span>报告条目</span></div><div><strong>' + sources + '</strong><span>手册出处</span></div>';
 }
 
 function generateEvidence() {
   const run = state.lastRun || { elapsed: null, commands: [], findings: [] };
-  const commandCount = (run.commands || []).length;
+  const commandCount = (run.collected || run.commands || []).length;
   const reportCount = (run.findings || []).length;
   const sourceCount = (run.findings || []).reduce((sum, finding) => sum + ((finding.sources || []).length), 0);
-  const aiTime = run.elapsed == null ? "待诊断后自动填充" : run.elapsed + " 秒";
-  const md = [
+  const notesInput = $("#manualNotes");
+  let notes = notesInput.value;
+  if (notes === notesInput.dataset.i18nValueZh || notes === notesInput.dataset.i18nValueEn) {
+    notes = state.locale === "en" ? notesInput.dataset.i18nValueEn : notesInput.dataset.i18nValueZh;
+  }
+  const md = state.locale === "en" ? [
+    "| Dimension | Manual method | Offline AI Ops Assistant | Data source |",
+    "| --- | --- | --- | --- |",
+    `| Troubleshooting steps | ${$("#manualSteps").value} steps, ${notes} | 1 click + ${commandCount} automated read-only commands | Field notes / this diagnostic |`,
+    `| Time | ${$("#manualMinutes").value} minutes | ${run.elapsed == null ? "Auto-filled after a diagnostic" : run.elapsed + " seconds"} | Timed field comparison / this diagnostic |`,
+    `| AI collection | Commands entered manually | ${commandCount} read-only commands | Latest diagnostic run |`,
+    "| FR-11 acceptance baseline (not measured) | 25 minutes / 14 steps / 3 manual lookups | 3 minutes / 1 click / 6 automated commands | Requirements §4.1 |",
+    `| Manual lookups | ${$("#manualLookups").value} | Retrieved from the index with citations | Field notes / report citations |`,
+    "| Interpretation reliability | Depends on operator experience; easy to miss details | Deterministic rule-tree results with an expandable path | UI path panel |",
+    `| Knowledge reliability | Manually located references | ${reportCount} findings with ${sourceCount} service-provided citations | Report citations |`,
+    "| Knowledge capture | Experience remains in personal notes | Save this run as a local skill package | Skill library |",
+    "| Cost | Relies on web search or an experienced engineer | Runs locally without an external subscription | Presentation statement |",
+    "| Honesty boundary | Operator explains unknowns | Missing evidence and unresolved items are shown explicitly | Report unresolved-items section |",
+  ].join("\n") : [
     "| 维度 | 手动方法 | 离线 AI 运维助手 | 数据来源 |",
     "| --- | --- | --- | --- |",
-    "| 排障步骤 | " + $("#manualSteps").value + " 步，" + $("#manualNotes").value + " | 1 次点击 + " + commandCount + " 条自动采集命令 | 现场记录 / 本次诊断 |",
-    "| 耗时 | " + $("#manualMinutes").value + " 分钟 | " + aiTime + " | 双路径现场计时 / 本次诊断 |",
+    "| 排障步骤 | " + $("#manualSteps").value + " 步，" + notes + " | 1 次点击 + " + commandCount + " 条自动采集命令 | 现场记录 / 本次诊断 |",
+    "| 耗时 | " + $("#manualMinutes").value + " 分钟 | " + (run.elapsed == null ? "待诊断后自动填充" : run.elapsed + " 秒") + " | 双路径现场计时 / 本次诊断 |",
     "| AI 采集命令 | 手动逐条输入 | " + commandCount + " 条只读命令 | 最近一次诊断记录 |",
     "| FR-11 验收基线（非实测） | 25 分钟 / 14 步 / 翻手册 3 次 | 3 分钟 / 1 次点击 / 自动执行 6 条命令 | 需求文档 §4.1 |",
     "| 翻手册次数 | " + $("#manualLookups").value + " 次 | 由索引检索并展示出处 | 现场记录 / 报告出处栏 |",
@@ -1242,7 +1491,7 @@ function generateEvidence() {
     "| 成本 | 依赖联网搜索或资深工程师到场 | 本地运行，无外部服务订阅 | 答辩陈述 |",
     "| 诚实边界 | 由人工说明未知项 | 无依据时显示未找到依据，未决项显式列出 | 报告未决栏 |",
   ].join("\n");
-  $("#evidenceOutput").value = state.locale === "en" ? translateUiText(md) : md;
+  $("#evidenceOutput").value = md;
 }
 
 async function copyEvidence() {
@@ -1304,7 +1553,7 @@ function startSelectedSkillCheckup() {
   renderSourceShelf();
   setBusy(true);
   setProgress(1, "准备体检");
-  runDiagnostic(skill.id);
+  runDiagnostic(skill.id, "一键体检：" + displayedSkillName, $("#executionMode").value);
 }
 
 function simulateSwitchCommand(command) {
@@ -1354,6 +1603,7 @@ function bindEvents() {
   $("#refreshStatusBtn").addEventListener("click", () => loadHealth({ interactive: true }));
   $("#refreshSkillsBtn").addEventListener("click", loadSkills);
   $("#composerForm").addEventListener("submit", sendMessage);
+  $("#interactionMode").addEventListener("change", () => setBusy(false));
   $("#faultText").addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();

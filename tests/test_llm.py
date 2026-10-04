@@ -265,6 +265,12 @@ class AnswerFlowTest(unittest.TestCase):
         result = qa.answer("你是谁")
         self.assertEqual((result["action"], result["answer"]), ("greet", qa.INTRO))
 
+    def test_english_locale_returns_english_intro(self):
+        self._dispatch_to("greet")
+        rag.retrieve = lambda q, k=5: self.fail("a greeting should not run retrieval")
+        result = qa.answer("hello", locale="en")
+        self.assertEqual((result["action"], result["answer"]), ("greet", qa.INTRO_EN))
+
     def test_reject_out_of_scope(self):
         self._dispatch_to("reject")
         self.assertEqual(qa.answer("Windows 怎么重装")["answer_type"], "out_of_scope")
@@ -278,9 +284,10 @@ class AnswerFlowTest(unittest.TestCase):
         self._dispatch_to("clarify", "")
         self.assertEqual(qa.dispatch("s5700")["action"], "answer")
 
-    def test_bad_dispatch_output_falls_back_to_answer(self):
+    def test_bad_dispatch_output_is_protocol_error(self):
         qa.chat = lambda *a, **kw: "不是 JSON"
-        self.assertEqual(qa.dispatch("怎么配置 trunk")["action"], "answer")
+        with self.assertRaises(qa.LLMProtocolError):
+            qa.dispatch("怎么配置 trunk")
 
     def test_generated_answer_used_when_verified(self):
         self._dispatch_to("answer")
@@ -288,6 +295,31 @@ class AnswerFlowTest(unittest.TestCase):
                              "unsupported_commands": []}
         result = qa.answer("怎么配置 trunk")
         self.assertEqual(result["answer_type"], "generated")
+
+    def test_explicit_no_direct_answer_is_not_published_as_generated(self):
+        self._dispatch_to("answer")
+        rag.ask = lambda *a, **kw: {"found": True,
+            "answer": "手册中没有直接回答这个问题，相关内容如下：", "citations": [{"n": 1}],
+            "unsupported_commands": [], "latency_s": 0.1}
+        result = qa.answer("直接告诉我是哪个端口")
+        self.assertEqual(result["answer_type"], "not_found")
+        self.assertEqual(result["citations"], [])
+
+    def test_no_direct_disclaimer_with_sourced_details_is_retained(self):
+        self._dispatch_to("answer")
+        rag.ask = lambda *a, **kw: {"found": True,
+            "answer": "手册中没有直接回答这个问题，相关内容如下：检查接口物理状态。", "citations": [{"n": 1}],
+            "unsupported_commands": [], "latency_s": 0.1}
+        result = qa.answer("接口状态")
+        self.assertEqual(result["answer_type"], "generated")
+
+    def test_unfinished_generated_lead_in_falls_back_to_source(self):
+        self._dispatch_to("answer")
+        rag.ask = lambda *a, **kw: {"found": True, "answer": "可按以下步骤检查：",
+                                    "citations": [{"n": 1}], "unsupported_commands": [], "latency_s": 0.1}
+        result = qa.answer("接口状态")
+        self.assertEqual(result["answer_type"], "extracted")
+        self.assertEqual(result["answer"], self.PASSAGE["text"])
         self.assertIn("port link-type trunk", result["extract"]["text"])
 
     def test_falls_back_to_source_text_when_not_verified(self):
@@ -300,15 +332,14 @@ class AnswerFlowTest(unittest.TestCase):
         self.assertEqual(result["citations"][0]["page"], 7)
         self.assertEqual(result["unsupported_commands"], ["interface eth-trunk 1"])
 
-    def test_model_error_after_extract_falls_back_to_source_text(self):
+    def test_model_error_after_extract_propagates_as_system_error(self):
         self._dispatch_to("answer")
 
         def broken_ask(q, prompt=None):
             raise qa.LLMError("连不上 Ollama")
         rag.ask = broken_ask
-        result = qa.answer("怎么配置 trunk")
-        self.assertEqual(result["answer_type"], "extracted")
-        self.assertEqual(result["answer"], self.PASSAGE["text"])
+        with self.assertRaises(qa.LLMError):
+            qa.answer("怎么配置 trunk")
 
     def test_stream_gives_source_text_before_final(self):
         self._dispatch_to("answer")
@@ -327,6 +358,33 @@ class AnswerFlowTest(unittest.TestCase):
         self.assertEqual(result["query"], "S5700 的型号规格")
         self.assertEqual(searched, ["S5700 的型号规格"])
 
+    def test_field_wording_for_clearing_configuration_expands_retrieval_query(self):
+        self._dispatch_to("answer")
+        seen = []
+        rag.retrieve = lambda q, k=5: (seen.append(q) or [self.PASSAGE])
+        rag.ask = lambda q, **kw: {"found": False, "answer": rag.NOT_FOUND, "citations": [],
+                                  "unsupported_commands": [], "latency_s": 0.1}
+        result = qa.answer("需要清空原有配置")
+        self.assertIn("恢复出厂配置", result["query"])
+        self.assertIn("恢复出厂配置", seen[0])
+
+    def test_lost_admin_credential_expands_to_manual_terms(self):
+        self._dispatch_to("answer")
+        seen = []
+        rag.retrieve = lambda q, k=5: (seen.append(q) or [self.PASSAGE])
+        rag.ask = lambda q, **kw: {"found": False, "answer": rag.NOT_FOUND, "citations": [],
+                                  "unsupported_commands": [], "latency_s": 0.1}
+        result = qa.answer("S5700 管理员口令遗失但可用 Console 连接")
+        self.assertIn("忘记登录密码", result["query"])
+        self.assertIn("忘记登录密码", seen[0])
+
+    def test_generic_lost_password_requires_model_and_access_context(self):
+        self._dispatch_to("answer")
+        rag.retrieve = lambda q, k=5: self.fail("条件不足时不应检索并发布某一型号的恢复步骤")
+        result = qa.answer("管理员口令遗失且无法进入设备")
+        self.assertEqual(result["answer_type"], "clarify")
+        self.assertIn("设备型号", result["answer"])
+
     def test_citations_renumbered_in_order_of_appearance(self):
         citations = [{"n": 1, "label": "a"}, {"n": 3, "label": "c"}, {"n": 2, "label": "b"}]
         text, ordered = qa._renumber("第一点 [1]\n第二点 [3]\n第三点 [2]\n多余 [9]", citations)
@@ -341,6 +399,14 @@ class AnswerFlowTest(unittest.TestCase):
         qa.answer("怎么配置 trunk")
         self.assertEqual(prompts, [qa.QA_ANSWER_PROMPT])
         self.assertNotEqual(qa.QA_ANSWER_PROMPT, rag.ANSWER_PROMPT)
+
+    def test_english_locale_selects_english_answer_prompt(self):
+        self._dispatch_to("answer")
+        prompts = []
+        rag.ask = lambda q, prompt=None: prompts.append(prompt) or {
+            "found": False, "answer": rag.NOT_FOUND, "citations": [], "unsupported_commands": []}
+        qa.answer("How do I configure a trunk?", locale="en")
+        self.assertEqual(prompts, [qa.QA_ANSWER_PROMPT_EN])
 
     def test_history_is_optional(self):
         self._dispatch_to("greet")

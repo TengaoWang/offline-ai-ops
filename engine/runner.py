@@ -45,7 +45,7 @@ def _resolve_vars(spec: dict, results: dict, overrides: dict | None = None) -> d
     return values
 
 
-def _pick_command(item: dict) -> tuple[str | None, str]:
+def _pick_command(item: dict, replay_only: bool = False) -> tuple[str | None, str]:
     """选出这条命令在当前系统上的写法。返回 (命令, target)。
 
     run 可以是一条命令（target 默认 local，即 Windows 写法），也可以按系统分别写：
@@ -54,21 +54,21 @@ def _pick_command(item: dict) -> tuple[str | None, str]:
     run = item["run"]
     if not isinstance(run, dict):
         return run, item.get("target", "local")
-    if executor.local_target() == "local_mac" and "mac" in run and executor.live_supported("local_mac"):
+    if not replay_only and executor.local_target() == "local_mac" and "mac" in run and executor.live_supported("local_mac"):
         return run["mac"], "local_mac"
     if "windows" in run:
         return run["windows"], "local"
     return None, "local"
 
 
-def _collect(skill: dict, runner=None, overrides: dict | None = None) -> Iterator[dict]:
+def _collect(skill: dict, runner=None, overrides: dict | None = None, replay_only: bool = False) -> Iterator[dict]:
     """按顺序执行采集命令，每条执行完就产出结果。"""
     collect = skill["collect"]
     timeout = float(collect.get("timeout", executor.DEFAULT_TIMEOUT))
     results: dict[str, dict] = {}
     started = time.monotonic()
     for item in collect["commands"]:
-        command, target = _pick_command(item)
+        command, target = _pick_command(item, replay_only)
         if command is None:  # 这条命令没有当前系统的写法（例如只在 macOS 上用的 netstat -rn），跳过
             continue
         values = _resolve_vars(collect.get("vars"), results, overrides)
@@ -79,7 +79,8 @@ def _collect(skill: dict, runner=None, overrides: dict | None = None) -> Iterato
         else:
             remaining = max(1.0, COLLECT_BUDGET - (time.monotonic() - started))
             result = executor.execute(command, target=target, timeout=min(timeout, remaining),
-                                      replay=skill["dir"] / "replay" / f"{item['id']}.txt", runner=runner)
+                                      replay=skill["dir"] / "replay" / f"{item['id']}.txt", runner=runner,
+                                      force_replay=replay_only)
         result.update({"id": item["id"], "target": target})
         results[item["id"]] = result
         yield result
@@ -109,21 +110,22 @@ def _finding(skill: dict, finding_id: str, rule_path: list[str], values: dict) -
 
 
 def run_skill(skill_id: str, skills_dir: Path | str | None = None, runner=None, use_ai: bool = True,
-              overrides: dict | None = None) -> Iterator[tuple[str, dict]]:
+              overrides: dict | None = None, replay_only: bool = False) -> Iterator[tuple[str, dict]]:
     """执行一个技能，逐步产出 (事件名, 数据)。技能不存在或格式错误时抛出 ValueError。
 
-    overrides：覆盖 collect.yaml 里的变量，例如 {"target": "192.168.10.20"}；只接受该技能定义过的变量。"""
+    overrides：覆盖 collect.yaml 里的变量，例如 {"target": "192.168.10.20"}；只接受该技能定义过的变量。
+    replay_only：全部命令读回放（界面的「模拟」模式）。"""
     started = time.monotonic()
     skill = load_skill(Path(skills_dir or SKILLS_DIR) / skill_id)
     if not skill["valid"]:
         raise ValueError(f"技能 {skill_id} 不可执行：" + "；".join(skill["errors"]))
-    live = executor.live_supported()
+    live = executor.live_supported() and not replay_only
     yield "start", {"skill": skill_id, "demo": False, "engine": True, "name": skill["name"], "live": live}
 
     commands, results = [], {}
     allowed = (skill["collect"].get("vars") or {}).keys()
     overrides = {k: str(v) for k, v in (overrides or {}).items() if k in allowed and v not in (None, "")}
-    for index, result in enumerate(_collect(skill, runner, overrides), 1):
+    for index, result in enumerate(_collect(skill, runner, overrides, replay_only), 1):
         commands.append(result)
         results[result["id"]] = result
         yield "collect", {"index": index, **result}

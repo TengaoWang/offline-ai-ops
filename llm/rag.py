@@ -21,8 +21,8 @@ from pathlib import Path
 
 import numpy as np
 
-from . import config
-from .client import LLMError, chat, embed
+from . import config, kb
+from .client import LLMError, LLMProtocolError, LLMTimeout, chat, embed
 
 with warnings.catch_warnings():  # jieba 在 Python 3.12 下会打印无害的 SyntaxWarning
     warnings.simplefilter("ignore", SyntaxWarning)
@@ -40,7 +40,7 @@ CANDIDATES = 20       # 混合检索时，BM25 和向量各取多少段参与合
 RRF_K = 60            # RRF 公式 1/(RRF_K + 名次) 里的常数，60 是论文和业界的常用值
 VECTOR_WEIGHT = 2.0   # 合并时向量这一路的权重（BM25 为 1）；测试集上 1.5 到 3 结果相同，取中间值
 EMBED_BATCH = 32      # 建向量时每次送给模型的段数
-ASK_PASSAGES = 3      # ask() 最多交给模型几段资料（每段 = 命中段 + 同一小节的前后相邻段）
+ASK_PASSAGES = 2      # 限制上下文时延；每段仍包含命中段与同一小节前后相邻段
 NEIGHBORS = 1         # 命中一段时，前后各补几段（同一小节内）
 
 ANSWER_PROMPT = """你是离线机房运维助手。只能根据下面带编号的手册片段回答用户问题。
@@ -50,7 +50,7 @@ ANSWER_PROMPT = """你是离线机房运维助手。只能根据下面带编号�
 3. 先判断片段讲的是不是用户问的那件事：名称相近但不是同一个功能或对象时，不能拿来回答。
 4. citations 只填真正写着你所用内容的片段编号（整数）。
 5. 片段不足以回答时，found 填 false，answer 填「手册中未找到依据。」，citations 为空。
-6. 回答简洁，操作步骤用编号列出。"""
+6. 回答最多 3 个要点、正文最多 220 个中文字符，操作步骤用编号列出；不要只写“如下”等引导句而省略正文，必须优先保证 JSON 完整闭合。"""
 
 ANSWER_SCHEMA = {
     "type": "object",
@@ -207,11 +207,12 @@ def ingest(docs_dir: Path | str | None = None, index_path: Path | str | None = N
     """重建索引，返回 {"files": 文件数, "chunks": 片段数, "vectors": 向量化结果或失败原因}。
     手册更新后重新运行即可；向量模型不可用时只建 BM25 索引，检索自动退回 BM25。"""
     docs_dir = Path(docs_dir or config.DOCS_DIR)
-    index_path = Path(index_path or config.INDEX_PATH)
+    index_path = Path(index_path or kb.default_index())
     files = sorted(p for p in docs_dir.rglob("*") if p.suffix.lower() in {".pdf", ".md", ".txt"})
     if not files:
         raise FileNotFoundError(f"{docs_dir} 下没有 PDF / Markdown / TXT 文件")
 
+    kb.assert_writable(index_path)
     index_path.parent.mkdir(parents=True, exist_ok=True)
     index_path.unlink(missing_ok=True)
     db = sqlite3.connect(index_path)
@@ -249,7 +250,8 @@ def _embed_text(section: str, text: str) -> str:
 def build_vectors(model: str | None = None, index_path: Path | str | None = None) -> dict:
     """给索引里的每一段算向量，存进 vectors 表。同一个索引可以存多个向量模型的结果。"""
     model = model or config.EMBED_MODEL
-    index_path = Path(index_path or config.INDEX_PATH)
+    index_path = Path(index_path or kb.default_index())
+    kb.assert_writable(index_path)
     start = time.perf_counter()
     db = sqlite3.connect(index_path)
     db.execute("CREATE TABLE IF NOT EXISTS vectors (model TEXT, id INTEGER, vec BLOB, PRIMARY KEY (model, id))")
@@ -291,11 +293,16 @@ _MOCK_CHUNKS = [
 _VECTOR_CACHE: dict = {}
 
 
+def _read_db(index_path: Path):
+    """Open an index without granting the retrieval path write access."""
+    return sqlite3.connect(index_path.resolve().as_uri() + "?mode=ro", uri=True)
+
+
 def _load_vectors(index_path: Path, model: str):
     """读出某个向量模型的全部向量，返回 (段 id 数组, 向量矩阵)；没有就返回 None。结果缓存在内存里。"""
     key = (str(index_path), model, index_path.stat().st_mtime)
     if key not in _VECTOR_CACHE:
-        db = sqlite3.connect(index_path)
+        db = _read_db(index_path)
         try:
             rows = db.execute("SELECT id, vec FROM vectors WHERE model = ? ORDER BY id", (model,)).fetchall()
         except sqlite3.OperationalError:  # 旧索引没有 vectors 表
@@ -334,6 +341,8 @@ def _vector_ranking(query: str, index_path: Path, n: int) -> list[tuple[int, flo
     ids, matrix = loaded
     try:
         q = _normalize(embed([_query_text(query, model)], model)[0])
+    except LLMTimeout:
+        raise
     except LLMError:
         return None
     sims = matrix @ q
@@ -353,12 +362,12 @@ def retrieve(query: str, k: int = 5, index_path: Path | str | None = None, mode:
     if config.MOCK:
         return [c | {"label": _cite_label(c), "vec_score": None, "bm25_rank": None, "vec_rank": None, "mode": "mock"}
                 for c in _MOCK_CHUNKS[:k]]
-    index_path = Path(index_path or config.INDEX_PATH)
+    index_path = Path(index_path or kb.default_index())
     if not index_path.exists():
         raise FileNotFoundError(f"索引不存在：{index_path}，请先运行 python -m llm ingest")
     mode = mode or config.RETRIEVE_MODE
 
-    db = sqlite3.connect(index_path)
+    db = _read_db(index_path)
     vector = _vector_ranking(query, index_path, max(k, CANDIDATES)) if mode in ("hybrid", "vector") else None
     if vector is None:
         mode = "bm25"
@@ -423,10 +432,10 @@ def _with_neighbors(chunks: list[dict], index_path: Path | None = None) -> list[
     一个配置示例常被切成几段（如「配置 A」「配置 B」「查看结果」），只命中其中一段时，
     模型看不到完整的命令；补上相邻段可以解决。结果按命中名次排序。
     """
-    index_path = Path(index_path or config.INDEX_PATH)
+    index_path = Path(index_path or kb.default_index())
     if config.MOCK or not index_path.exists():
         return [c | {"ids": [c["id"]]} for c in chunks]
-    db = sqlite3.connect(index_path)
+    db = _read_db(index_path)
     passages: list[dict] = []
     for chunk in chunks:
         rows = db.execute(
@@ -489,7 +498,8 @@ def _unsupported_commands(answer: str, sources: list[str]) -> list[str]:
     return [c for c in _commands(answer) if _command_key(c) not in source_key]
 
 
-def ask(question: str, k: int = 5, model: str | None = None, prompt: str | None = None) -> dict:
+def ask(question: str, k: int = 5, model: str | None = None, prompt: str | None = None,
+        num_predict: int | None = None) -> dict:
     """根据手册回答问题。先检索 k 段，补上同一小节的相邻段并合并，最多把 ASK_PASSAGES 段交给模型。
 
     返回 {"answer": 回答, "found": 是否找到依据, "citations": [{"n", "file", "page", "section",
@@ -516,11 +526,17 @@ def ask(question: str, k: int = 5, model: str | None = None, prompt: str | None 
              {"role": "user", "content": f"手册片段：\n{context}\n\n问题：{question}"}],
             schema=ANSWER_SCHEMA,
             model=model,
+            num_predict=num_predict or config.QA_NUM_PREDICT,
         )
         try:
             reply = json.loads(raw)
-        except json.JSONDecodeError:
-            reply = {"found": False, "answer": NOT_FOUND, "citations": []}
+        except json.JSONDecodeError as exc:
+            raise LLMProtocolError("模型问答返回了无效 JSON") from exc
+        if not isinstance(reply, dict):
+            raise LLMProtocolError("模型问答返回的 JSON 不是对象")
+        if (not isinstance(reply.get("found"), bool) or not isinstance(reply.get("answer"), str)
+                or not isinstance(reply.get("citations"), list)):
+            raise LLMProtocolError("模型问答返回字段不符合契约")
 
     # 只保留真实存在的编号；没有任何有效出处的回答一律视为没找到依据
     numbers = [n for n in dict.fromkeys(reply.get("citations", [])) if isinstance(n, int) and 1 <= n <= len(chunks)]

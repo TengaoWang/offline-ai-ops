@@ -124,7 +124,7 @@ def _print_answer(question: str, as_json: bool, history: list[dict] | None = Non
     if not as_json:
         print(f"问：{question}\n")
     result = {}
-    for event in answer_stream(question, history):
+    for event in answer_stream(question, history, diagnose=True):
         if event["event"] == "final":
             result = {k: v for k, v in event.items() if k != "event"}
         if event["event"] == "dispatch" and not as_json and event["query"] != question:
