@@ -65,6 +65,9 @@
 | 57 | 2026-10-04 | `answer()` 对话里接入技能：调度器加 diagnose / remember；只有明确要求动手查才执行，只描述现象时回答后提示「要我现场排查吗」；参数只接受用户的话或记忆里出现过的值 | `llm/diagnose.py`、`llm/qa.py`、`llm/__main__.py` | 调度器评测：带技能 48/51，不带 50/51（新增回归：「华为交换机」「帮我看看交换机」应追问） | `9fd2745` |
 | 58 | 2026-10-04 | 曾在 `ui/server.py` 接引擎和 `/api/answer`，按陈文韬要求全部撤回，`ui/` 保持原样；接法写进前端说明第 11 节 | `docs/frontend-answer.md` | `ui/` 无改动 | `9fd2745` |
 | 59 | 2026-10-04 | 命令行输出统一 UTF-8（Windows 终端 GBK 下 🔴 等符号会报错） | `llm/__main__.py`、`engine/__main__.py` | 测试 62 项通过 | `9fd2745` |
+| 60 | 2026-10-04 | 使用说明 | `docs/usage.md`、`README.md` | — | `7eaa0bc` |
+| 61 | 2026-10-04 | 开 PR #4 时发现 main 上 Haward 的 `cea93c6` 也实现了引擎和技能并接入界面，冲突。按陈文韬决定：技能和引擎用我们的，界面适配我们 | — | — | — |
+| 62 | 2026-10-04 | 合并 main：新增 `engine/skill_engine.py` 适配层（和 main 的 SkillEngine 同接口），`ui/` 不改；替换 main 的引擎和技能内容；`answer()` 的排查和记忆改为 `diagnose=True` 才打开，界面问答不变；保留 main 的 llama.cpp、索引快照、英文模式等 llm 改动 | `engine/`、`skills/`、`llm/qa.py`、文档 | 测试 92 项通过；用 main 的界面接口实测 real / simulation / 存技能通过；`eval_p0_diagnostics` 有 2 项因「无依据结论不隐藏」不通过，待和 Haward 对齐。PR #4 可合并，**未合并到 main** | `1747cfa` |
 
 ## 评测结果
 
