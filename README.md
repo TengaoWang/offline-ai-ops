@@ -6,6 +6,8 @@ GGboys · HacKU 2026 · Deep Technology Problem Statement 4（The Capability Tha
 根据故障描述选出排查技能包、在本机执行只读检查、按规则树判定，并给出带手册出处的报告；
 还能在手册里检索依据、带出处回答问题，并记住现场信息和以前的排查经历。模型与知识库全部在本机运行。
 
+**怎么用：看 [`docs/usage.md`](docs/usage.md)（使用说明，含演示前检查）。**
+
 ## 目录
 
 | 目录 | 内容 | 状态 |
